@@ -16,6 +16,7 @@ import sys
 from flask import Flask
 from threading import Thread
 import traceback
+import aiohttp
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 TICKET_CATEGORY_ID = 1498367118461108274
@@ -41,6 +42,22 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
+###### SELF PING
+
+async def self_ping():
+    await bot.wait_until_ready()
+
+    async with aiohttp.ClientSession() as session:
+        while not bot.is_closed():
+            try:
+                async with session.get("https://reloaded-pd.onrender.com"):
+                    print("🔁 Self ping sent")
+            except Exception as e:
+                print(e)
+
+            await asyncio.sleep(300)
+
+
 def is_on_cooldown(user_id):
     """Check if a user is on cooldown."""
     current_time = time.time()
@@ -60,6 +77,7 @@ async def on_ready():
     await  bot.change_presence(activity=discord.activity.Game(name="Reloaded RolePlay"), status=discord.Status.online)
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
+    bot.loop.create_task(self_ping())
     print("Είμαι Ξύπνιος")
     try:
         synced = await bot.tree.sync()
@@ -70,29 +88,36 @@ async def on_ready():
 # =========================
 # DATABASE (HeidiSQL)
 # =========================
+    
 db = None
 
 def get_db():
     global db
 
     try:
+        if db is None:
+            raise Exception("DB is None")
+
         db.ping(reconnect=True)
+
     except:
         db = pymysql.connect(
-    host=os.getenv("DB_HOST"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASS"),
-    database=os.getenv("DB_NAME"),
-    port=int(os.getenv("DB_PORT")),
-    cursorclass=pymysql.cursors.Cursor,
-    autocommit=True
-)
-    print("🔄 Reconnected to DB")
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASS"),
+            database=os.getenv("DB_NAME"),
+            port=int(os.getenv("DB_PORT")),
+            cursorclass=pymysql.cursors.Cursor,
+            autocommit=True
+        )
+        print("🔄 Reconnected to DB")
+
+    return db
+
 
 def get_cursor():
-    db.ping(reconnect=True)  # 🔥 κρατάει τη σύνδεση ζωντανή
+    db = get_db()  # 🔥 ΕΔΩ ΕΙΝΑΙ ΤΟ FIX
     return db.cursor()
-print("DB CONNECTED")
 # =========================
 # ACTIVE CACHE
 # =========================
