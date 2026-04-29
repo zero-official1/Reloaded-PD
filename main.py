@@ -292,7 +292,7 @@ async def post_rules(ctx):
 
 @bot.command()
 @commands.has_permissions(administrator=True)  
-async def post_rules(ctx):
+async def post_academy(ctx):
   
     embed = discord.Embed(
         title="",
