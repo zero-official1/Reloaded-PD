@@ -80,7 +80,9 @@ db = pymysql.connect(
     autocommit=True
 )
 
-cursor = db.cursor()
+def get_cursor():
+    db.ping(reconnect=True)  # 🔥 κρατάει τη σύνδεση ζωντανή
+    return db.cursor()
 print("DB CONNECTED")
 # =========================
 # ACTIVE CACHE
@@ -134,6 +136,7 @@ async def get_transcript(channel: discord.TextChannel):
 # =========================
 
 async def cleanup_tickets(guild: discord.Guild):
+    cursor = get_cursor()
     cursor.execute("SELECT user_id, channel_id FROM tickets")
     rows = cursor.fetchall()
 
@@ -141,9 +144,8 @@ async def cleanup_tickets(guild: discord.Guild):
         channel = guild.get_channel(channel_id)
 
         if channel is None:
+            cursor = get_cursor()  # νέο cursor + reconnect
             cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
-            db.commit()
-
 
 
    ################## Ranks
@@ -440,6 +442,7 @@ class TicketSelect(Select):
                     ephemeral=True
                 )
 
+            cursor = get_cursor()
             cursor.execute("SELECT channel_id FROM tickets WHERE user_id=%s", (user_id,))
             existing = cursor.fetchone()
 
@@ -451,8 +454,8 @@ class TicketSelect(Select):
                         ephemeral=True
                     )
                 else:
+                    cursor = get_cursor()
                     cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
-                    db.commit()
 
             selected_option = self.values[0]
 
@@ -555,10 +558,11 @@ class CloseTicketButton(Button):
 
             channel = interaction.channel
 
+            cursor = get_cursor()
             cursor.execute(
-                "SELECT user_id, type FROM tickets WHERE channel_id=%s",
-                (channel.id,)
-            )
+            "SELECT user_id, type FROM tickets WHERE channel_id=%s",
+            (channel.id,)
+        )
             data = cursor.fetchone()
 
             if not data:
@@ -645,21 +649,27 @@ class StaffPanel(View):
         await cleanup_tickets(interaction.guild)
         await interaction.response.send_message("Cleanup done", ephemeral=True)
 
-    @discord.ui.button(label="📊 Active", style=discord.ButtonStyle.primary)
-    async def active(self, interaction: discord.Interaction, button: Button):
-        cursor.execute("SELECT COUNT(*) FROM tickets")
-        await interaction.response.send_message(
-            f"Active: {cursor.fetchone()[0]}",
-            ephemeral=True
-        )
+@discord.ui.button(label="📊 Active", style=discord.ButtonStyle.primary)
+async def active(self, interaction: discord.Interaction, button: Button):
+    cursor = get_cursor()
+    cursor.execute("SELECT COUNT(*) FROM tickets")
+    count = cursor.fetchone()[0]
 
-    @discord.ui.button(label="📁 Closed", style=discord.ButtonStyle.success)
-    async def closed(self, interaction: discord.Interaction, button: Button):
-        cursor.execute("SELECT COUNT(*) FROM closed_tickets")
-        await interaction.response.send_message(
-            f"Closed: {cursor.fetchone()[0]}",
-            ephemeral=True
-        )
+    await interaction.response.send_message(
+        f"Active: {count}",
+        ephemeral=True
+    )
+
+@discord.ui.button(label="📁 Closed", style=discord.ButtonStyle.success)
+async def closed(self, interaction: discord.Interaction, button: Button):
+    cursor = get_cursor()
+    cursor.execute("SELECT COUNT(*) FROM closed_tickets")
+    count = cursor.fetchone()[0]
+
+    await interaction.response.send_message(
+        f"Closed: {count}",
+        ephemeral=True
+    )
 
 
 @bot.command()
