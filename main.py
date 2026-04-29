@@ -186,6 +186,75 @@ async def post_ranks(ctx):
     embed.set_footer(text="Reloaded Roleplay")
     await ctx.send(embed=embed)
 
+   ################## PATROL VEHICLES
+
+@bot.command()
+async def vehicles(ctx):
+    embed = discord.Embed(
+        title="",
+        description="# <:policebadge:1496988066269761596> Patrol Vehicles\n━━━━━━━━━━━━━━━━━━━━━━",
+        color=discord.Color.blue()
+    )
+
+    # 📌 Attach files (local images)
+    vehiclespat = discord.File("images/vehiclespat.png", filename="vehiclespatr.png")
+    swatfbi = discord.File("images/swatfbi.png", filename="swatfbi.png")
+    fbiswat = discord.File("images/fbiswat.png", filename="fbiswat.png")
+    bikepatrol = discord.File("images/bikepatrol.jpg", filename="bikepatrol.jpg")
+
+    # 🚔 Patrol Cruiser
+    embed.add_field(
+        name="🚔 Patrol Vehicles",
+        value=(
+            "**Audi RS6 \n Βαθμίδες: Officer I, Officer II, Officer III**\n"
+            "**BMW M5 \n Βαθμίδες: Officer I, Officer II, Officer III**\n"
+            "**BMW M3 \n Βαθμίδες: Officer I, Officer II, Officer III**\n"
+            "**Mercedes GT63 \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
+            "**BMW M7 \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
+            "**Mustang \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
+            "**Police Helicopter \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
+            "**Image:**\n"
+            "attachment://vehiclespat.png"
+        ),
+        inline=False
+    )
+
+    # 🚙 Highway Interceptor
+    embed.add_field(
+        name="🚓 F.I.B - S.W.A.T",
+        value=(
+            "**Bearcat \n Βαθμίδες: S.W.A.T**\n"
+            "**Charger \n Βαθμίδες: S.W.A.T**\n"
+            "**Durango \n Βαθμίδες: S.W.A.T**\n"
+            "**Sprinter \n Βαθμίδες: F.I.B, S.W.A.T**\n"
+            "**Unmarked - Ασφαλίτικο \n Βαθμίδες: F.I.B, S.W.A.T**\n"
+            "**Subarban \n Βαθμίδες: S.W.A.T**\n"
+            "**Image:**\n"
+            "attachment://swatfbi.png"
+            "attachment://fbiswat.png"
+        ),
+        inline=False
+    )
+
+    # 🛻 SUV Unit
+    embed.add_field(
+        name="🏍 Bike Unit",
+        value=(
+            "**Kawasaki \n Βαθμίδες: Bike Unit**\n"
+            "**Image:**\n"
+            "attachment://bikepatrol.jpg"
+        ),
+        inline=False
+    )
+
+    # Footer
+    embed.set_footer(text="Reloaded Roleplay")
+
+# ⚠️ IMPORTANT: send files μαζί με embed
+    await ctx.send(
+        embed=embed,
+        files=[vehiclespat, fbiswat, swatfbi, bikepatrol]
+    )
 
    ################## GENERAL RULES
 
@@ -513,17 +582,17 @@ class TicketSelect(Select):
             discord.SelectOption(
                 label="Report an Officer",
                 description="Κάντε Report έναν Αστυνομικό",
-                emoji="<a:siren:1498369700025995294>"
+                emoji=discord.PartialEmoji(name="siren", id=1498369700025995294, animated=True)
             ),
             discord.SelectOption(
                 label="Report LSPD",
                 description="Κάντε Report το LSPD",
-                emoji="<a:ticketpd:1498375774258856079>"
+                emoji=discord.PartialEmoji(name="ticketpd", id=1498375774258856079, animated=True)
             ),
             discord.SelectOption(
                 label="Other",
                 description="Άνοιξε ένα Ticket για κάτι άλλο",
-                emoji="<a:question:1498376468550647978>"
+                emoji=discord.PartialEmoji(name="question", id=1498376468550647978, animated=True)
             )
         ]
 
@@ -535,124 +604,130 @@ class TicketSelect(Select):
             custom_id="ticket_select"
         )
 
-async def callback(self, interaction: discord.Interaction):
-    try:
-        guild = interaction.guild
-        user_id = interaction.user.id
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            # 🔥 FIX interaction failed
+            await interaction.response.defer(ephemeral=True)
 
-        category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
-        if category is None:
-            return await interaction.response.send_message(
-                "❌ Δεν βρέθηκε category για tickets.",
-                ephemeral=True
-            )
+            guild = interaction.guild
+            user_id = interaction.user.id
 
-        cursor = get_cursor()
-        cursor.execute("SELECT channel_id FROM tickets WHERE user_id=%s", (user_id,))
-        existing = cursor.fetchone()
-
-        if existing:
-            channel = guild.get_channel(existing[0])
-            if channel:
-                return await interaction.response.send_message(
-                    f"⚠️ Έχετε ήδη ανοικτό ticket: {channel.mention}",
+            category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
+            if category is None:
+                return await interaction.followup.send(
+                    "❌ Δεν βρέθηκε category για tickets.",
                     ephemeral=True
                 )
+
+            cursor = get_cursor()
+            cursor.execute("SELECT channel_id FROM tickets WHERE user_id=%s", (user_id,))
+            existing = cursor.fetchone()
+
+            if existing:
+                channel = guild.get_channel(existing[0])
+                if channel:
+                    return await interaction.followup.send(
+                        f"⚠️ Έχετε ήδη ανοικτό ticket: {channel.mention}",
+                        ephemeral=True
+                    )
+                else:
+                    cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
+                    db.commit()
+
+            selected_option = self.values[0]
+
+            role = guild.get_role(TICKET_MANAGER_ROLE_ID)
+
+            username = re.sub(r'[^a-z0-9-]', '', interaction.user.name.lower())
+            channel_name = f"ticket-{username}"
+
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            }
+
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+            ticket_channel = await guild.create_text_channel(
+                name=channel_name,
+                category=category,
+                overwrites=overwrites
+            )
+
+            cursor.execute(
+                "INSERT INTO tickets (user_id, channel_id, type) VALUES (%s, %s, %s)",
+                (user_id, ticket_channel.id, selected_option)
+            )
+            db.commit()
+
+            embed = discord.Embed(
+                title="🎟️ Ticket Opened",
+                description=(
+                    f"👋 Γεια σας {interaction.user.mention}, το ticket σας δημιουργήθηκε!\n"
+                    f"Το **{selected_option}** αίτημά σας θα απαντηθεί σύντομα.\n\n"
+                    "**Παρακαλώ να έχετε υπομονή!**"
+                ),
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
+
+            embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
+            embed.add_field(
+                name="📅 Ημερομηνία Δημιουργίας",
+                value=discord.utils.format_dt(interaction.created_at, style='F'),
+                inline=True
+            )
+            embed.add_field(name="🔍 Τύπος Ticket", value=f"**{selected_option}**", inline=True)
+
+            embed.add_field(
+                name="⚠️ Ειδοποίηση",
+                value="Παρακαλώ μην κάνετε συνεχόμενα ping.",
+                inline=False
+            )
+
+            embed.add_field(
+                name="📜 Κατευθυντήριες Οδηγίες",
+                value="Να είστε ευγενικοί και να ακολουθείτε τους κανόνες.",
+                inline=False
+            )
+
+            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+
+            if guild.icon:
+                embed.set_footer(text="Σύστημα Υποστήριξης Ticket", icon_url=guild.icon.url)
             else:
-                cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
-                db.commit()
+                embed.set_footer(text="Σύστημα Υποστήριξης Ticket")
 
-        selected_option = self.values[0]
+            await ticket_channel.send(
+                content=interaction.user.mention,
+                embed=embed,
+                view=CloseTicketView()
+            )
 
-        role = guild.get_role(TICKET_MANAGER_ROLE_ID)
-
-        username = re.sub(r'[^a-z0-9-]', '', interaction.user.name.lower())
-        channel_name = f"ticket-{username}"
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-        }
-
-        if role:
-            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-
-        ticket_channel = await guild.create_text_channel(
-            name=channel_name,
-            category=category,
-            overwrites=overwrites
-        )
-
-        cursor.execute(
-            "INSERT INTO tickets (user_id, channel_id, type) VALUES (%s, %s, %s)",
-            (user_id, ticket_channel.id, selected_option)
-        )
-        db.commit()
-
-        embed = discord.Embed(
-            title="🎟️ Ticket Opened",
-            description=(
-                f"👋 Γεια σας {interaction.user.mention}, το ticket σας δημιουργήθηκε!\n"
-                f"Το **{selected_option}** αίτημά σας θα απαντηθεί σύντομα.\n\n"
-                "**Παρακαλώ να έχετε υπομονή!**"
-            ),
-            color=discord.Color.blue(),
-            timestamp=discord.utils.utcnow()
-        )
-
-        embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
-        embed.add_field(
-            name="📅 Ημερομηνία Δημιουργίας",
-            value=discord.utils.format_dt(interaction.created_at, style='F'),
-            inline=True
-        )
-        embed.add_field(name="🔍 Τύπος Ticket", value=f"**{selected_option}**", inline=True)
-
-        embed.add_field(
-            name="⚠️ Ειδοποίηση",
-            value="Παρακαλώ μην κάνετε συνεχόμενα ping.",
-            inline=False
-        )
-
-        embed.add_field(
-            name="📜 Κατευθυντήριες Οδηγίες",
-            value="Να είστε ευγενικοί και να ακολουθείτε τους κανόνες.",
-            inline=False
-        )
-
-        embed.set_thumbnail(url=interaction.user.display_avatar.url)
-
-        if guild.icon:
-            embed.set_footer(text="Σύστημα Υποστήριξης Ticket", icon_url=guild.icon.url)
-        else:
-            embed.set_footer(text="Σύστημα Υποστήριξης Ticket")
-
-        await ticket_channel.send(
-            content=interaction.user.mention,
-            embed=embed,
-            view=CloseTicketView()
-        )
-
-        # ✅ ΜΟΝΟ ΕΝΑ RESPONSE
-        await interaction.response.send_message(
-            f"✅ Ticket created: {ticket_channel.mention}",
-            ephemeral=True
-        )
-
-    except Exception as e:
-        print(traceback.format_exc())
-
-        # SAFE RESPONSE (anti Unknown interaction)
-        if interaction.response.is_done():
             await interaction.followup.send(
-                f"❌ Error:\n```{e}```",
+                f"✅ Ticket created: {ticket_channel.mention}",
                 ephemeral=True
             )
-        else:
-            await interaction.response.send_message(
-                f"❌ Error:\n```{e}```",
-                ephemeral=True
-            )
+
+        except Exception as e:
+            print(traceback.format_exc())
+
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(
+                        f"❌ Error:\n```{e}```",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message(
+                        f"❌ Error:\n```{e}```",
+                        ephemeral=True
+                    )
+            except:
+                pass
+
+
 # =========================
 # CLOSE BUTTON
 # =========================
@@ -668,7 +743,6 @@ class CloseTicketButton(Button):
 
     async def callback(self, interaction: discord.Interaction):
         try:
-            # 🔥 respond immediately (prevent 10062 error)
             await interaction.response.defer(ephemeral=True)
 
             channel = interaction.channel
@@ -687,9 +761,6 @@ class CloseTicketButton(Button):
 
             user_id, ticket_type = data
 
-            # =========================
-            # TRANSCRIPT (UNCHANGED)
-            # =========================
             transcript = await get_transcript(channel)
 
             file = discord.File(
@@ -697,9 +768,6 @@ class CloseTicketButton(Button):
                 filename=f"ticket-{channel.id}.txt"
             )
 
-            # =========================
-            # LOG CHANNEL (UNCHANGED UI)
-            # =========================
             log_channel = bot.get_channel(TICKET_LOG_CHANNEL_ID)
 
             if log_channel:
@@ -713,9 +781,6 @@ class CloseTicketButton(Button):
                     file=file
                 )
 
-            # =========================
-            # DB SAFE EXECUTION
-            # =========================
             cursor.execute(
                 "INSERT INTO closed_tickets (user_id, channel_id, type, transcript) VALUES (%s, %s, %s, %s)",
                 (user_id, channel.id, ticket_type, transcript)
@@ -728,12 +793,9 @@ class CloseTicketButton(Button):
 
             db.commit()
 
-            # ⚡ respond BEFORE deleting channel (IMPORTANT FIX)
             await interaction.followup.send("🔒 Closing ticket...", ephemeral=True)
 
-            # small delay to avoid race condition
             await asyncio.sleep(0.5)
-
             await channel.delete()
 
         except Exception as e:
@@ -745,6 +807,8 @@ class CloseTicketButton(Button):
                 )
             except:
                 pass
+
+
 # =========================
 # VIEWS
 # =========================
@@ -754,10 +818,12 @@ class CloseTicketView(View):
         super().__init__(timeout=None)
         self.add_item(CloseTicketButton())
 
+
 class TicketView(View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(TicketSelect())
+
 
 # =========================
 # STAFF PANEL
@@ -793,7 +859,6 @@ class StaffPanel(View):
             f"Closed: {count}",
             ephemeral=True
         )
-
 
 @bot.command()
 @commands.has_permissions(administrator=True)
