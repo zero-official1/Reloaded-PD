@@ -70,8 +70,15 @@ async def on_ready():
 # =========================
 # DATABASE (HeidiSQL)
 # =========================
+db = None
 
-db = pymysql.connect(
+def get_db():
+    global db
+
+    try:
+        db.ping(reconnect=True)
+    except:
+        db = pymysql.connect(
     host=os.getenv("DB_HOST"),
     user=os.getenv("DB_USER"),
     password=os.getenv("DB_PASS"),
@@ -80,6 +87,7 @@ db = pymysql.connect(
     cursorclass=pymysql.cursors.Cursor,
     autocommit=True
 )
+    print("🔄 Reconnected to DB")
 
 def get_cursor():
     db.ping(reconnect=True)  # 🔥 κρατάει τη σύνδεση ζωντανή
@@ -419,7 +427,84 @@ async def specialrules(ctx):
     await channel2.send(embed=embed2)
     await channel3.send(embed=embed3)
 
+######### BIKE RULES
+@bot.command(name="post_bike")
+async def post_bike(ctx):
 
+    embed = discord.Embed(
+        title="",
+        description=(
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <:role:1499128720236089384> ROLE DEFINITION\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🏍️ Traffic Enforcement → κλήσεις, speed control, checks\n"
+            "🚨 Rapid Response → πρώτη ανταπόκριση σε σκηνές\n"
+            "🛣️ Highway / City Patrol → περιπολίες & ασφάλεια δρόμων\n"
+            "🤝 Escort Duties → VIP / convoy / event protection\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <:protocol:1499129341789995189> PURSUIT PROTOCOL\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Pursuit επιτρέπεται με ελεγχόμενη ταχύτητα\n"
+            "• ❌ Όχι reckless chasing σε στενά\n"
+            "• Backup υποχρεωτικό σε ισχυρά οχήματα\n"
+            "• ❌ Όχι solo engagement σε heavily armed suspects\n\n"
+            "🛵 Bike Role:\n"
+            "• Track & report μόνο\n"
+            "• Όχι solo arrests σε high-risk pursuit\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <:radio:1499129949263495319> RADIO COMMUNICATION\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔊 \"Bike unit καταδιώκει ...\"\n"
+            "📍 Συνεχείς location updates\n"
+            "🚨 Ζητάς άμεσα βοήθεια αν χάνεις τον έλεγχο\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <:blackgun:1499130896366960801> USE OF FORCE\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Πρώτα μιλάς\n"
+            "• ⚡ Taser μόνο σε σταθερή θέση\n"
+            "• ❌ Όχι taser εν κινήσει\n"
+            "• 🔴 Lethal force μόνο σε άμεση απειλή ζωής\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <a:tick:1498099638249590935> REALISM RULES\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• ❌ Όχι unrealistic maneuvers\n"
+            "• ❌ Όχι arrest χωρίς control\n"
+            "• ❌ Όχι solo gang engagements\n"
+            "• Injuries παίζονται ρεαλιστικά πάντα\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <a:police:1496977575581454367> DEPLOYMENT\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Highway patrol\n"
+            "• City enforcement\n"
+            "• VIP / Event escort\n"
+            "• ❌ Όχι engagements σε gang wars\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <:brain:1499132977064706068> Συμπεριφορά\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Σεβασμός ιεραρχίας\n"
+            "• ❌ Powergaming / metagaming απαγορεύεται\n"
+            "• Crash = mandatory injury RP\n"
+            "• Real officer behavior\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# <:ywarning:1499133647394177124> SPECIAL CONDITIONS\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Αν πέσεις από μηχανή → παίζεις τραυματισμό υποχρεωτικά\n"
+            "• Αν χαλάσει η μηχανή → σταματάς και καλείς βοήθεια\n"
+            "• Είσαι εκτεθειμένος → παίρνεις κάλυψη"
+        ),
+        color=discord.Color.from_rgb(25, 118, 210)
+    )
+
+    embed.set_footer(text="Reloaded Roleplay • Motorcycle Division")
+
+    await ctx.send(embed=embed)
 
 ######### TICKET
 class TicketSelect(Select):
@@ -450,117 +535,124 @@ class TicketSelect(Select):
             custom_id="ticket_select"
         )
 
-    async def callback(self, interaction: discord.Interaction):
-        try:
-            await interaction.response.defer(ephemeral=True)
+async def callback(self, interaction: discord.Interaction):
+    try:
+        guild = interaction.guild
+        user_id = interaction.user.id
 
-            guild = interaction.guild
-            user_id = interaction.user.id
-
-            category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
-            if category is None:
-                return await interaction.followup.send(
-                    "❌ Δεν βρέθηκε category για tickets.",
-                    ephemeral=True
-                )
-
-            cursor = get_cursor()
-            cursor.execute("SELECT channel_id FROM tickets WHERE user_id=%s", (user_id,))
-            existing = cursor.fetchone()
-
-            if existing:
-                channel = guild.get_channel(existing[0])
-                if channel:
-                    return await interaction.followup.send(
-                        f"⚠️ Έχετε ήδη ανοικτό ticket: {channel.mention}",
-                        ephemeral=True
-                    )
-                else:
-                    cursor = get_cursor()
-                    cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
-
-            selected_option = self.values[0]
-
-            role = guild.get_role(TICKET_MANAGER_ROLE_ID)
-
-            username = re.sub(r'[^a-z0-9-]', '', interaction.user.name.lower())
-            channel_name = f"ticket-{username}"
-
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-            }
-
-            if role:
-                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-
-            ticket_channel = await guild.create_text_channel(
-                name=channel_name,
-                category=category,
-                overwrites=overwrites
-            )
-
-            cursor.execute(
-                "INSERT INTO tickets (user_id, channel_id, type) VALUES (%s, %s, %s)",
-                (user_id, ticket_channel.id, selected_option)
-            )
-            db.commit()
-
-            embed = discord.Embed(
-                title="🎟️ Ticket Opened",
-                description=(
-                    f"👋 Γεια σας {interaction.user.mention}, το ticket σας δημιουργήθηκε!\n"
-                    f"Το **{selected_option}** αίτημά σας θα απαντηθεί σύντομα.\n\n"
-                    "**Παρακαλώ να έχετε υπομονή!**"
-                ),
-                color=discord.Color.blue(),
-                timestamp=discord.utils.utcnow()
-            )
-
-            embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
-            embed.add_field(
-                name="📅 Ημερομηνία Δημιουργίας",
-                value=discord.utils.format_dt(interaction.created_at, style='F'),
-                inline=True
-            )
-            embed.add_field(name="🔍 Τύπος Ticket", value=f"**{selected_option}**", inline=True)
-
-            embed.add_field(
-                name="⚠️ Ειδοποίηση",
-                value="Παρακαλώ μην κάνετε συνεχόμενα ping.",
-                inline=False
-            )
-
-            embed.add_field(
-                name="📜 Κατευθυντήριες Οδηγίες",
-                value="Να είστε ευγενικοί και να ακολουθείτε τους κανόνες.",
-                inline=False
-            )
-
-            embed.set_thumbnail(url=interaction.user.display_avatar.url)
-
-            if guild.icon:
-                embed.set_footer(text="Σύστημα Υποστήριξης Ticket", icon_url=guild.icon.url)
-            else:
-                embed.set_footer(text="Σύστημα Υποστήριξης Ticket")
-
-            await ticket_channel.send(
-                content=interaction.user.mention,
-                embed=embed,
-                view=CloseTicketView()
-            )
-
-            await interaction.followup.send(
-                f"✅ Ticket created: {ticket_channel.mention}",
+        category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
+        if category is None:
+            return await interaction.response.send_message(
+                "❌ Δεν βρέθηκε category για tickets.",
                 ephemeral=True
             )
 
-        except Exception as e:
-            print(traceback.format_exc())
+        cursor = get_cursor()
+        cursor.execute("SELECT channel_id FROM tickets WHERE user_id=%s", (user_id,))
+        existing = cursor.fetchone()
+
+        if existing:
+            channel = guild.get_channel(existing[0])
+            if channel:
+                return await interaction.response.send_message(
+                    f"⚠️ Έχετε ήδη ανοικτό ticket: {channel.mention}",
+                    ephemeral=True
+                )
+            else:
+                cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
+                db.commit()
+
+        selected_option = self.values[0]
+
+        role = guild.get_role(TICKET_MANAGER_ROLE_ID)
+
+        username = re.sub(r'[^a-z0-9-]', '', interaction.user.name.lower())
+        channel_name = f"ticket-{username}"
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        }
+
+        if role:
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+        ticket_channel = await guild.create_text_channel(
+            name=channel_name,
+            category=category,
+            overwrites=overwrites
+        )
+
+        cursor.execute(
+            "INSERT INTO tickets (user_id, channel_id, type) VALUES (%s, %s, %s)",
+            (user_id, ticket_channel.id, selected_option)
+        )
+        db.commit()
+
+        embed = discord.Embed(
+            title="🎟️ Ticket Opened",
+            description=(
+                f"👋 Γεια σας {interaction.user.mention}, το ticket σας δημιουργήθηκε!\n"
+                f"Το **{selected_option}** αίτημά σας θα απαντηθεί σύντομα.\n\n"
+                "**Παρακαλώ να έχετε υπομονή!**"
+            ),
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+
+        embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
+        embed.add_field(
+            name="📅 Ημερομηνία Δημιουργίας",
+            value=discord.utils.format_dt(interaction.created_at, style='F'),
+            inline=True
+        )
+        embed.add_field(name="🔍 Τύπος Ticket", value=f"**{selected_option}**", inline=True)
+
+        embed.add_field(
+            name="⚠️ Ειδοποίηση",
+            value="Παρακαλώ μην κάνετε συνεχόμενα ping.",
+            inline=False
+        )
+
+        embed.add_field(
+            name="📜 Κατευθυντήριες Οδηγίες",
+            value="Να είστε ευγενικοί και να ακολουθείτε τους κανόνες.",
+            inline=False
+        )
+
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+
+        if guild.icon:
+            embed.set_footer(text="Σύστημα Υποστήριξης Ticket", icon_url=guild.icon.url)
+        else:
+            embed.set_footer(text="Σύστημα Υποστήριξης Ticket")
+
+        await ticket_channel.send(
+            content=interaction.user.mention,
+            embed=embed,
+            view=CloseTicketView()
+        )
+
+        # ✅ ΜΟΝΟ ΕΝΑ RESPONSE
+        await interaction.response.send_message(
+            f"✅ Ticket created: {ticket_channel.mention}",
+            ephemeral=True
+        )
+
+    except Exception as e:
+        print(traceback.format_exc())
+
+        # SAFE RESPONSE (anti Unknown interaction)
+        if interaction.response.is_done():
             await interaction.followup.send(
-        f"❌ Error creating ticket:\n```{e}```",
-        ephemeral=True
-    )
+                f"❌ Error:\n```{e}```",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"❌ Error:\n```{e}```",
+                ephemeral=True
+            )
 # =========================
 # CLOSE BUTTON
 # =========================
