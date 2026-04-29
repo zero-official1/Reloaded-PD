@@ -31,7 +31,8 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is alive!"
+    time.sleep(1)  # μικρό delay για stability
+    return "OK", 200   # IMPORTANT
 
 def run():
     app.run(host='0.0.0.0', port=8080)
