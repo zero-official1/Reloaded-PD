@@ -575,25 +575,27 @@ class CloseTicketButton(Button):
 
     async def callback(self, interaction: discord.Interaction):
         try:
+            # 🔥 respond immediately (prevent 10062 error)
             await interaction.response.defer(ephemeral=True)
 
             channel = interaction.channel
 
             cursor = get_cursor()
             cursor.execute(
-            "SELECT user_id, type FROM tickets WHERE channel_id=%s",
-            (channel.id,)
-        )
+                "SELECT user_id, type FROM tickets WHERE channel_id=%s",
+                (channel.id,)
+            )
             data = cursor.fetchone()
 
             if not data:
+                await interaction.followup.send("⚠️ Ticket not found in DB", ephemeral=True)
                 await channel.delete()
                 return
 
             user_id, ticket_type = data
 
             # =========================
-            # TRANSCRIPT
+            # TRANSCRIPT (UNCHANGED)
             # =========================
             transcript = await get_transcript(channel)
 
@@ -603,7 +605,7 @@ class CloseTicketButton(Button):
             )
 
             # =========================
-            # LOG CHANNEL
+            # LOG CHANNEL (UNCHANGED UI)
             # =========================
             log_channel = bot.get_channel(TICKET_LOG_CHANNEL_ID)
 
@@ -619,7 +621,7 @@ class CloseTicketButton(Button):
                 )
 
             # =========================
-            # DB SAVE
+            # DB SAFE EXECUTION
             # =========================
             cursor.execute(
                 "INSERT INTO closed_tickets (user_id, channel_id, type, transcript) VALUES (%s, %s, %s, %s)",
@@ -633,14 +635,21 @@ class CloseTicketButton(Button):
 
             db.commit()
 
+            # ⚡ respond BEFORE deleting channel (IMPORTANT FIX)
             await interaction.followup.send("🔒 Closing ticket...", ephemeral=True)
+
+            # small delay to avoid race condition
+            await asyncio.sleep(0.5)
 
             await channel.delete()
 
         except Exception as e:
             print("Ticket close error:", e)
             try:
-                await interaction.followup.send("❌ Failed to close ticket", ephemeral=True)
+                await interaction.followup.send(
+                    f"❌ Failed to close ticket:\n```{e}```",
+                    ephemeral=True
+                )
             except:
                 pass
 # =========================
@@ -670,27 +679,27 @@ class StaffPanel(View):
         await cleanup_tickets(interaction.guild)
         await interaction.response.send_message("Cleanup done", ephemeral=True)
 
-@discord.ui.button(label="📊 Active", style=discord.ButtonStyle.primary)
-async def active(self, interaction: discord.Interaction, button: Button):
-    cursor = get_cursor()
-    cursor.execute("SELECT COUNT(*) FROM tickets")
-    count = cursor.fetchone()[0]
+    @discord.ui.button(label="📊 Active", style=discord.ButtonStyle.primary)
+    async def active(self, interaction: discord.Interaction, button: Button):
+        cursor = get_cursor()
+        cursor.execute("SELECT COUNT(*) FROM tickets")
+        count = cursor.fetchone()[0]
 
-    await interaction.response.send_message(
-        f"Active: {count}",
-        ephemeral=True
-    )
+        await interaction.response.send_message(
+            f"Active: {count}",
+            ephemeral=True
+        )
 
-@discord.ui.button(label="📁 Closed", style=discord.ButtonStyle.success)
-async def closed(self, interaction: discord.Interaction, button: Button):
-    cursor = get_cursor()
-    cursor.execute("SELECT COUNT(*) FROM closed_tickets")
-    count = cursor.fetchone()[0]
+    @discord.ui.button(label="📁 Closed", style=discord.ButtonStyle.success)
+    async def closed(self, interaction: discord.Interaction, button: Button):
+        cursor = get_cursor()
+        cursor.execute("SELECT COUNT(*) FROM closed_tickets")
+        count = cursor.fetchone()[0]
 
-    await interaction.response.send_message(
-        f"Closed: {count}",
-        ephemeral=True
-    )
+        await interaction.response.send_message(
+            f"Closed: {count}",
+            ephemeral=True
+        )
 
 
 @bot.command()
