@@ -288,6 +288,27 @@ async def post_rules(ctx):
     embed.set_footer(text="Reloaded Roleplay")
     await ctx.send(embed=embed)
 
+   ################## ACADEMY
+
+@bot.command()
+@commands.has_permissions(administrator=True)  
+async def post_rules(ctx):
+  
+    embed = discord.Embed(
+        title="",
+        description="# <:academy:1499043455471587358>〢 ACADEMY \n **Η ώρες που θα γίνονται το academy γισ την ένταξη σας στο σώμα του Los Santos Police Department θα είναι**\n\n"
+        "**Δευτερα 5:30**\n"
+        "**Τετάρτη 4:30**\n"
+        "**Σάββατο 5:30**\n",
+        color=discord.Color.dark_red()
+    )
+    embed.set_footer(text="Reloaded Roleplay")
+    await ctx.send(
+    content="@everyone",
+    embed=embed,
+    allowed_mentions=discord.AllowedMentions(everyone=True)
+)
+
    ################## ARMORY
 
 @bot.command()
