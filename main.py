@@ -1142,146 +1142,75 @@ async def post_applications(ctx):
 
 DATA_FILE = "fbi_data.json"
 
-# ====== DEFAULT DATA (EDIT THIS WITH YOUR TEAM) ======
-default_data = {
-    "message_id": None,
-    "roster": {
-        111111111111111111: "Director",
-        222222222222222222: "Senior Agent",
-        333333333333333333: "Agent"
-    }
-}
-
 # ====== LOAD / SAVE ======
 def load_data():
     if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w") as f:
-            json.dump(default_data, f, indent=4)
-        return default_data
-
+        return {"message_id": None, "agents": {}}
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-def save_data(data):
+def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
 data = load_data()
 
+# ====== EMBED ======
+def make_embed():
+    agents = data["agents"]
 
-# ====== EMBED BUILDER ======
-def build_embed(guild):
-    roster = data["roster"]
-
-    if roster:
-        lines = []
-        for uid, rank in roster.items():
-            lines.append(f"🪪 **{rank:<14}** | <@{uid}>")
-        members_text = "\n".join(lines)
+    if agents:
+        lines = [f"🪪 **{rank}** | <@{uid}>" for uid, rank in agents.items()]
+        text = "\n".join(lines)
     else:
-        members_text = "*No registered personnel.*"
+        text = "*No agents registered.*"
 
-    embed = discord.Embed(
+    return discord.Embed(
         title="🧾 FEDERAL INVESTIGATION BUREAU",
         description=(
             "**CLASSIFIED DOSSIER**\n\n"
-            "This document contains sensitive information regarding active F.I.B personnel.\n"
-            "Unauthorized access, distribution, or disclosure is strictly prohibited.\n\n"
+            "Authorized personnel list:\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{members_text}\n"
+            f"{text}\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "**STATUS:** 🟢 ACTIVE\n"
-            "**CLEARANCE LEVEL:** 🔴 MAXIMUM"
+            "STATUS: ACTIVE\n"
+            "CLEARANCE: MAXIMUM"
         ),
-        color=discord.Color.from_rgb(10, 25, 50)
+        color=discord.Color.dark_blue()
     )
 
-    embed.set_footer(text="F.I.B Internal Database • Eyes Only")
+# ====== COMMANDS ======
 
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-
-    return embed
-
-
-# =====================================================
-# 📋 COMMANDS (ORDERED BY HOW YOU USE THEM)
-# =====================================================
-
-# 1️⃣ CREATE DOSSIER (RUN FIRST ONE TIME)
+# 1. Create embed
 @bot.command()
-@commands.has_permissions(administrator=True)
-async def createdossier(ctx):
-    embed = build_embed(ctx.guild)
-    msg = await ctx.send(embed=embed)
-
+async def setup(ctx):
+    msg = await ctx.send(embed=make_embed())
     data["message_id"] = msg.id
-    save_data(data)
+    save_data()
+    await ctx.send("✅ Setup complete")
 
-    await ctx.send("✅ Dossier created and saved.")
-
-
-# 2️⃣ ADD AGENT
+# 2. Add user
 @bot.command()
-@commands.has_permissions(administrator=True)
-async def addleaderboard(ctx, member: discord.Member, *, rank: str):
-    roster = data["roster"]
+async def add(ctx, member: discord.Member, *, rank: str):
+    data["agents"][str(member.id)] = rank
+    save_data()
+    await update(ctx)
 
-    if str(member.id) in roster:
-        await ctx.send("⚠️ Agent already exists.")
-        return
-
-    roster[str(member.id)] = rank
-    save_data(data)
-
-    await update_embed(ctx)
-    await ctx.send(f"✅ Added {member.mention} as **{rank}**")
-
-
-# 3️⃣ CHANGE RANK
+# 3. Remove user
 @bot.command()
-@commands.has_permissions(administrator=True)
-async def setrank(ctx, member: discord.Member, *, rank: str):
-    roster = data["roster"]
+async def remove(ctx, member: discord.Member):
+    data["agents"].pop(str(member.id), None)
+    save_data()
+    await update(ctx)
 
-    if str(member.id) not in roster:
-        await ctx.send("⚠️ Agent not found.")
-        return
-
-    roster[str(member.id)] = rank
-    save_data(data)
-
-    await update_embed(ctx)
-    await ctx.send(f"🔄 Updated {member.mention} → **{rank}**")
-
-
-# 4️⃣ REMOVE AGENT
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def removeagent(ctx, member: discord.Member):
-    roster = data["roster"]
-
-    if str(member.id) not in roster:
-        await ctx.send("⚠️ Agent not found.")
-        return
-
-    del roster[str(member.id)]
-    save_data(data)
-
-    await update_embed(ctx)
-    await ctx.send(f"❌ Removed {member.mention}")
-
-
-# ====== UPDATE EMBED ======
-async def update_embed(ctx):
+# ====== UPDATE MESSAGE ======
+async def update(ctx):
     if not data["message_id"]:
+        await ctx.send("Run !setup first")
         return
 
-    try:
-        msg = await ctx.channel.fetch_message(data["message_id"])
-        await msg.edit(embed=build_embed(ctx.guild))
-    except:
-        pass
+    msg = await ctx.channel.fetch_message(data["message_id"])
+    await msg.edit(embed=make_embed())
 
 
 
