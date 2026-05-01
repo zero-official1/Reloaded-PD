@@ -1138,6 +1138,90 @@ async def post_applications(ctx):
 
     await ctx.send(embed=embed, view=view)
 
+########### LEADERBOARD
+LEADERBOARD_FILE = "leaderboard.json"
+
+# Load leaderboard
+def load_leaderboard():
+    if not os.path.exists(LEADERBOARD_FILE):
+        return {}
+    with open(LEADERBOARD_FILE, "r") as f:
+        return json.load(f)
+
+# Save leaderboard
+def save_leaderboard(data):
+    with open(LEADERBOARD_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+leaderboard = load_leaderboard()
+
+# ➕ Add user to leaderboard
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def addleaderboard(ctx, member: discord.Member):
+    user_id = str(member.id)
+
+    if user_id in leaderboard:
+        await ctx.send(f"⚠️ {member.mention} is already on the leaderboard.")
+        return
+
+    leaderboard[user_id] = {
+        "name": member.name,
+        "score": 0
+    }
+
+    save_leaderboard(leaderboard)
+
+    embed = discord.Embed(
+        title="🕵️ F.I.B Leaderboard",
+        description=f"{member.mention} has been added to the leaderboard.",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+
+    await ctx.send(embed=embed)
+
+# 📊 Show leaderboard
+@bot.command()
+async def leaderboard(ctx):
+    if not leaderboard:
+        await ctx.send("No one is on the leaderboard yet.")
+        return
+
+    sorted_lb = sorted(leaderboard.items(), key=lambda x: x[1]["score"], reverse=True)
+
+    embed = discord.Embed(
+        title="🏆 F.I.B Leaderboard",
+        color=discord.Color.gold()
+    )
+
+    for i, (user_id, data) in enumerate(sorted_lb[:10], start=1):
+        member = ctx.guild.get_member(int(user_id))
+        name = member.display_name if member else data["name"]
+
+        embed.add_field(
+            name=f"#{i} - {name}",
+            value=f"Score: **{data['score']}**",
+            inline=False
+        )
+
+    await ctx.send(embed=embed)
+
+# ➕ Add score (optional but useful)
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def addscore(ctx, member: discord.Member, amount: int):
+    user_id = str(member.id)
+
+    if user_id not in leaderboard:
+        await ctx.send("User is not on the leaderboard.")
+        return
+
+    leaderboard[user_id]["score"] += amount
+    save_leaderboard(leaderboard)
+
+    await ctx.send(f"✅ Added {amount} points to {member.mention}")
+
 
 
 keep_alive()
