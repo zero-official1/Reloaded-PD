@@ -215,71 +215,75 @@ async def post_ranks(ctx):
 
 @bot.command()
 async def vehicles(ctx):
-    embed = discord.Embed(
-        title="",
-        description="# <:policebadge:1496988066269761596> Patrol Vehicles\n━━━━━━━━━━━━━━━━━━━━━━",
+
+    # =========================
+    # 🚔 Patrol Vehicles
+    # =========================
+    vehiclespat = discord.File("images/vehiclespat.png", filename="vehiclespat.png")
+
+    embed1 = discord.Embed(
+        description=(
+            "# <:policebadge:1496988066269761596> Patrol Vehicles\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "**Audi RS6**\nΒαθμίδες: Officer I, Officer II, Officer III\n\n"
+            "**BMW M5**\nΒαθμίδες: Officer I, Officer II, Officer III\n\n"
+            "**BMW M3**\nΒαθμίδες: Officer I, Officer II, Officer III\n\n"
+            "**Mercedes GT63**\nΒαθμίδες: Captain, Assistant Chief, Chief\n\n"
+            "**BMW M7**\nΒαθμίδες: Captain, Assistant Chief, Chief\n\n"
+            "**Mustang**\nΒαθμίδες: Captain, Assistant Chief, Chief\n\n"
+            "**Police Helicopter**\nΒαθμίδες: Captain, Assistant Chief, Chief\n"
+        ),
         color=discord.Color.blue()
     )
 
-    # 📌 Attach files (local images)
-    vehiclespat = discord.File("images/vehiclespat.png", filename="vehiclespatr.png")
+    embed1.set_image(url="attachment://vehiclespat.png")
+    embed1.set_footer(text="Reloaded Roleplay")
+
+    # =========================
+    # 🚓 SWAT / FIB
+    # =========================
     swatfbi = discord.File("images/swatfbi.png", filename="swatfbi.png")
-    fbiswat = discord.File("images/fbiswat.png", filename="fbiswat.png")
+
+    embed2 = discord.Embed(
+        description=(
+            "# 🚓 F.I.B - S.W.A.T\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "**Bearcat**\nΒαθμίδες: S.W.A.T\n\n"
+            "**Charger**\nΒαθμίδες: S.W.A.T\n\n"
+            "**Durango**\nΒαθμίδες: S.W.A.T\n\n"
+            "**Sprinter**\nΒαθμίδες: F.I.B, S.W.A.T\n\n"
+            "**Unmarked - Ασφαλίτικο**\nΒαθμίδες: F.I.B, S.W.A.T\n\n"
+            "**Subarban**\nΒαθμίδες: S.W.A.T\n"
+        ),
+        color=discord.Color.blue()
+    )
+
+    embed2.set_image(url="attachment://swatfbi.png")
+    embed2.set_footer(text="Reloaded Roleplay")
+
+    # =========================
+    # 🏍 Bike Unit
+    # =========================
     bikepatrol = discord.File("images/bikepatrol.jpg", filename="bikepatrol.jpg")
 
-    # 🚔 Patrol Cruiser
-    embed.add_field(
-        name="🚔 Patrol Vehicles",
-        value=(
-            "**Audi RS6 \n Βαθμίδες: Officer I, Officer II, Officer III**\n"
-            "**BMW M5 \n Βαθμίδες: Officer I, Officer II, Officer III**\n"
-            "**BMW M3 \n Βαθμίδες: Officer I, Officer II, Officer III**\n"
-            "**Mercedes GT63 \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
-            "**BMW M7 \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
-            "**Mustang \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
-            "**Police Helicopter \n Βαθμίδες: Captain, Assistant Chief , Chief**\n"
-            "**Image:**\n"
-            "attachment://vehiclespat.png"
+    embed3 = discord.Embed(
+        description=(
+            "# 🏍 Bike Unit\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "**Kawasaki**\nΒαθμίδες: Bike Unit\n"
         ),
-        inline=False
+        color=discord.Color.blue()
     )
 
-    # 🚙 Highway Interceptor
-    embed.add_field(
-        name="🚓 F.I.B - S.W.A.T",
-        value=(
-            "**Bearcat \n Βαθμίδες: S.W.A.T**\n"
-            "**Charger \n Βαθμίδες: S.W.A.T**\n"
-            "**Durango \n Βαθμίδες: S.W.A.T**\n"
-            "**Sprinter \n Βαθμίδες: F.I.B, S.W.A.T**\n"
-            "**Unmarked - Ασφαλίτικο \n Βαθμίδες: F.I.B, S.W.A.T**\n"
-            "**Subarban \n Βαθμίδες: S.W.A.T**\n"
-            "**Image:**\n"
-            "attachment://swatfbi.png"
-            "attachment://fbiswat.png"
-        ),
-        inline=False
-    )
+    embed3.set_image(url="attachment://bikepatrol.jpg")
+    embed3.set_footer(text="Reloaded Roleplay")
 
-    # 🛻 SUV Unit
-    embed.add_field(
-        name="🏍 Bike Unit",
-        value=(
-            "**Kawasaki \n Βαθμίδες: Bike Unit**\n"
-            "**Image:**\n"
-            "attachment://bikepatrol.jpg"
-        ),
-        inline=False
-    )
-
-    # Footer
-    embed.set_footer(text="Reloaded Roleplay")
-
-# ⚠️ IMPORTANT: send files μαζί με embed
-    await ctx.send(
-        embed=embed,
-        files=[vehiclespat, fbiswat, swatfbi, bikepatrol]
-    )
+    # =========================
+    # SEND
+    # =========================
+    await ctx.send(embed=embed1, file=vehiclespat)
+    await ctx.send(embed=embed2, file=swatfbi)
+    await ctx.send(embed=embed3, file=bikepatrol)
 
    ################## GENERAL RULES
 
