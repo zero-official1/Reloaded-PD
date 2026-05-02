@@ -23,6 +23,10 @@ TICKET_CATEGORY_ID = 1498367118461108274
 TICKET_MANAGER_ROLE_ID = 1498368834057535519
 TICKET_LOG_CHANNEL_ID = 1478139098463076404  
 
+FIB_CHANNEL_ID = 1500253690341228544
+FIB_ROLE_ID = 1477611532954239098  
+
+
 LSPD_ROLE_ID = 1490821864145027314
 
 COOLDOWN_PERIOD = 15 * 24 * 60 * 60  
@@ -1140,7 +1144,92 @@ async def post_applications(ctx):
 
 ########### LEADERBOARD
 
+# Buttons View
+class FibView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
+    @discord.ui.button(label="Συμφωνώ", style=discord.ButtonStyle.success, emoji="✅")
+    async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            "✅ Έλαβες γνώση των κανόνων.", ephemeral=True
+        )
+
+    @discord.ui.button(label="Κατάλαβα", style=discord.ButtonStyle.primary, emoji="❤️")
+    async def understand(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            "❤️ Καλή συνέχεια στην υπηρεσία σου.", ephemeral=True
+        )
+
+    @discord.ui.button(label="Χιούμορ 😄", style=discord.ButtonStyle.secondary, emoji="😂")
+    async def fun(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            "😂 Stay sharp agent.", ephemeral=True
+        )
+
+
+@bot.command()
+async def fib(ctx):
+    channel = bot.get_channel(FIB_CHANNEL_ID)
+    role = ctx.guild.get_role(FIB_ROLE_ID)
+
+    if channel is None or role is None:
+        await ctx.send("❌ Δεν βρέθηκε το channel ή το role.")
+        return
+
+    embed = discord.Embed(
+        title="🦅 F.I.B. – Επίσημη Ανακοίνωση Διοίκησης",
+        description=(
+            "Καλησπέρα σε όλα τα μέλη.\n\n"
+            "Η διοίκηση του **F.I.B.** σας καλωσορίζει στην ομάδα.\n"
+            "Έχετε επιλεγεί βάσει εμπιστοσύνης και ικανότητας.\n\n"
+            "Στόχος μας είναι:\n"
+            "• Πειθαρχία\n"
+            "• Συνεργασία\n"
+            "• Επαγγελματισμός\n\n"
+            "Παρακαλείστε να διαβάσετε τους κανόνες και να δείχνετε σεβασμό.\n"
+        ),
+        color=discord.Color.dark_blue()
+    )
+
+    embed.add_field(
+        name="📋 Core Team",
+        value=(
+            "• Commissioner | STAVROSM12\n"
+            "• Commander | thodoris\n"
+            "• Assistant Chief of Police | ΜoNΣterkiller\n"
+            "• Captain | Akis \n"
+            "• Captain | 𝕭𝕮𝕮\n"
+            "• Chief of Police | Mortal\n"
+            "• Commander | andreas\n"
+            "• Assistant Chief of Police | Nikos"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="📌 Οδηγίες",
+        value=(
+            "• Η παραπάνω ομάδα αποτελεί τον βασικό πυρήνα.\n"
+            "• Επιπλέον μέλη θα προστίθενται όταν χρειάζεται.\n"
+            "• Για απορίες επικοινωνήστε με τη διοίκηση.\n"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(
+        text="F.I.B. High Command • Confidential",
+    )
+
+    view = FibView()
+
+    await channel.send(
+        content=f"{role.mention}",
+        embed=embed,
+        view=view
+    )
+
+    await ctx.send("✅ Το μήνυμα στάλθηκε στο fib-chat.")
 
 
 keep_alive()
