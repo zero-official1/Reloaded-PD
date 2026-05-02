@@ -1164,7 +1164,7 @@ class FibView(discord.ui.View):
     @discord.ui.button(label="Χιούμορ 😄", style=discord.ButtonStyle.secondary, emoji="😂")
     async def fun(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
-            "😂 Stay sharp agent.", ephemeral=True
+            "😂 Άσε ρε που θές και Χιούμορ πήγαιγε δούλεψε.", ephemeral=True
         )
 
 
