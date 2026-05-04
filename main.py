@@ -17,6 +17,9 @@ from flask import Flask
 from threading import Thread
 import traceback
 import aiohttp
+import asyncpg
+from supabase import create_client, Client
+from dotenv import load_dotenv
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 TICKET_CATEGORY_ID = 1498367118461108274
@@ -95,33 +98,45 @@ async def on_ready():
     
 db = None
 
-def get_db():
+async def get_db():
     global db
 
-    try:
-        if db is None:
-            raise Exception("DB is None")
-
-        db.ping(reconnect=True)
-
-    except:
-        db = pymysql.connect(
-            host=os.getenv("DB_HOST"),
+    if db is None:
+        db = await asyncpg.connect(
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASS"),
             database=os.getenv("DB_NAME"),
-            port=int(os.getenv("DB_PORT")),
-            cursorclass=pymysql.cursors.Cursor,
-            autocommit=True
+            host=os.getenv("DB_HOST"),
+            port=int(os.getenv("DB_PORT"))
+        )
+        print("🔄 Connected to Supabase DB")
+
+    try:
+        await db.execute("SELECT 1")
+    except:
+        db = await asyncpg.connect(
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASS"),
+            database=os.getenv("DB_NAME"),
+            host=os.getenv("DB_HOST"),
+            port=int(os.getenv("DB_PORT"))
         )
         print("🔄 Reconnected to DB")
 
     return db
 
 
-def get_cursor():
-    db = get_db()  # 🔥 ΕΔΩ ΕΙΝΑΙ ΤΟ FIX
-    return db.cursor()
+async def db_fetchrow(query, *args):
+    db = await get_db()
+    return await db.fetchrow(query, *args)
+
+async def db_execute(query, *args):
+    db = await get_db()
+    return await db.execute(query, *args)
+
+async def db_fetchval(query, *args):
+    db = await get_db()
+    return await db.fetchval(query, *args)
 # =========================
 # ACTIVE CACHE
 # =========================
@@ -174,16 +189,23 @@ async def get_transcript(channel: discord.TextChannel):
 # =========================
 
 async def cleanup_tickets(guild: discord.Guild):
-    cursor = get_cursor()
-    cursor.execute("SELECT user_id, channel_id FROM tickets")
-    rows = cursor.fetchall()
+    db = await get_db()
 
-    for user_id, channel_id in rows:
-        channel = guild.get_channel(channel_id)
+    rows = await db.fetch("SELECT user_id, channel_id FROM tickets")
+
+    deleted = 0
+
+    for row in rows:
+        channel = guild.get_channel(row["channel_id"])
 
         if channel is None:
-            cursor = get_cursor()  # νέο cursor + reconnect
-            cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
+            await db.execute(
+                "DELETE FROM tickets WHERE channel_id=$1",
+                row["channel_id"]
+            )
+            deleted += 1
+
+    print(f"🧹 Cleanup done - removed {deleted} orphan tickets")
 
 
    ################## Ranks
@@ -639,33 +661,33 @@ class TicketSelect(Select):
 
     async def callback(self, interaction: discord.Interaction):
         try:
-            # 🔥 FIX interaction failed
             await interaction.response.defer(ephemeral=True)
 
             guild = interaction.guild
             user_id = interaction.user.id
 
             category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
-            if category is None:
-                return await interaction.followup.send(
-                    "❌ Δεν βρέθηκε category για tickets.",
-                    ephemeral=True
-                )
+            if not category:
+                return await interaction.followup.send("❌ No ticket category found.", ephemeral=True)
 
-            cursor = get_cursor()
-            cursor.execute("SELECT channel_id FROM tickets WHERE user_id=%s", (user_id,))
-            existing = cursor.fetchone()
+            # CHECK EXISTING
+            existing = await db_fetchrow(
+                "SELECT channel_id FROM tickets WHERE user_id=$1",
+                user_id
+            )
 
             if existing:
-                channel = guild.get_channel(existing[0])
+                channel = guild.get_channel(existing["channel_id"])
                 if channel:
                     return await interaction.followup.send(
-                        f"⚠️ Έχετε ήδη ανοικτό ticket: {channel.mention}",
+                        f"⚠️ You already have a ticket: {channel.mention}",
                         ephemeral=True
                     )
                 else:
-                    cursor.execute("DELETE FROM tickets WHERE user_id=%s", (user_id,))
-                    db.commit()
+                    await db_execute(
+                        "DELETE FROM tickets WHERE user_id=$1",
+                        user_id
+                    )
 
             selected_option = self.values[0]
 
@@ -688,49 +710,27 @@ class TicketSelect(Select):
                 overwrites=overwrites
             )
 
-            cursor.execute(
-                "INSERT INTO tickets (user_id, channel_id, type) VALUES (%s, %s, %s)",
-                (user_id, ticket_channel.id, selected_option)
+            # INSERT TICKET
+            await db_execute(
+                "INSERT INTO tickets (user_id, channel_id, type) VALUES ($1, $2, $3)",
+                user_id,
+                ticket_channel.id,
+                selected_option
             )
-            db.commit()
 
             embed = discord.Embed(
                 title="🎟️ Ticket Opened",
                 description=(
-                    f"👋 Γεια σας {interaction.user.mention}, το ticket σας δημιουργήθηκε!\n"
-                    f"Το **{selected_option}** αίτημά σας θα απαντηθεί σύντομα.\n\n"
-                    "**Παρακαλώ να έχετε υπομονή!**"
+                    f"👋 Hello {interaction.user.mention}, your ticket was created!\n"
+                    f"Type: **{selected_option}**"
                 ),
                 color=discord.Color.blue(),
                 timestamp=discord.utils.utcnow()
             )
 
-            embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
-            embed.add_field(
-                name="📅 Ημερομηνία Δημιουργίας",
-                value=discord.utils.format_dt(interaction.created_at, style='F'),
-                inline=True
-            )
-            embed.add_field(name="🔍 Τύπος Ticket", value=f"**{selected_option}**", inline=True)
-
-            embed.add_field(
-                name="⚠️ Ειδοποίηση",
-                value="Παρακαλώ μην κάνετε συνεχόμενα ping.",
-                inline=False
-            )
-
-            embed.add_field(
-                name="📜 Κατευθυντήριες Οδηγίες",
-                value="Να είστε ευγενικοί και να ακολουθείτε τους κανόνες.",
-                inline=False
-            )
-
+            embed.add_field(name="User", value=interaction.user.mention)
+            embed.add_field(name="Type", value=selected_option)
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
-
-            if guild.icon:
-                embed.set_footer(text="Σύστημα Υποστήριξης Ticket", icon_url=guild.icon.url)
-            else:
-                embed.set_footer(text="Σύστημα Υποστήριξης Ticket")
 
             await ticket_channel.send(
                 content=interaction.user.mention,
@@ -745,20 +745,7 @@ class TicketSelect(Select):
 
         except Exception as e:
             print(traceback.format_exc())
-
-            try:
-                if interaction.response.is_done():
-                    await interaction.followup.send(
-                        f"❌ Error:\n```{e}```",
-                        ephemeral=True
-                    )
-                else:
-                    await interaction.response.send_message(
-                        f"❌ Error:\n```{e}```",
-                        ephemeral=True
-                    )
-            except:
-                pass
+            await interaction.followup.send(f"❌ Error:\n```{e}```", ephemeral=True)
 
 
 # =========================
@@ -768,7 +755,7 @@ class TicketSelect(Select):
 class CloseTicketButton(Button):
     def __init__(self):
         super().__init__(
-            label="Κλείσιμο Αιτήματος",
+            label="Κλείσιμο Ticket",
             style=discord.ButtonStyle.danger,
             emoji="🔒",
             custom_id="close_ticket_button"
@@ -780,66 +767,48 @@ class CloseTicketButton(Button):
 
             channel = interaction.channel
 
-            cursor = get_cursor()
-            cursor.execute(
-                "SELECT user_id, type FROM tickets WHERE channel_id=%s",
-                (channel.id,)
+            data = await db_fetchrow(
+                "SELECT user_id, type FROM tickets WHERE channel_id=$1",
+                channel.id
             )
-            data = cursor.fetchone()
 
             if not data:
-                await interaction.followup.send("⚠️ Ticket not found in DB", ephemeral=True)
+                await interaction.followup.send("⚠️ Ticket not found", ephemeral=True)
                 await channel.delete()
                 return
 
-            user_id, ticket_type = data
+            user_id = data["user_id"]
+            ticket_type = data["type"]
 
             transcript = await get_transcript(channel)
-
-            file = discord.File(
-                fp=io.BytesIO(transcript.encode("utf-8")),
-                filename=f"ticket-{channel.id}.txt"
-            )
 
             log_channel = bot.get_channel(TICKET_LOG_CHANNEL_ID)
 
             if log_channel:
                 await log_channel.send(
-                    content=(
-                        f"📁 **Ticket Closed**\n"
-                        f"👤 User: <@{user_id}>\n"
-                        f"🎫 Type: {ticket_type}\n"
-                        f"🏷️ Channel: #{channel.name}"
-                    ),
-                    file=file
+                    content=f"📁 Ticket Closed\nUser: <@{user_id}>\nType: {ticket_type}"
                 )
 
-            cursor.execute(
-                "INSERT INTO closed_tickets (user_id, channel_id, type, transcript) VALUES (%s, %s, %s, %s)",
-                (user_id, channel.id, ticket_type, transcript)
+            await db_execute(
+                "INSERT INTO closed_tickets (user_id, channel_id, type, transcript) VALUES ($1,$2,$3,$4)",
+                user_id,
+                channel.id,
+                ticket_type,
+                transcript
             )
 
-            cursor.execute(
-                "DELETE FROM tickets WHERE channel_id=%s",
-                (channel.id,)
+            await db_execute(
+                "DELETE FROM tickets WHERE channel_id=$1",
+                channel.id
             )
-
-            db.commit()
 
             await interaction.followup.send("🔒 Closing ticket...", ephemeral=True)
-
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
             await channel.delete()
 
         except Exception as e:
-            print("Ticket close error:", e)
-            try:
-                await interaction.followup.send(
-                    f"❌ Failed to close ticket:\n```{e}```",
-                    ephemeral=True
-                )
-            except:
-                pass
+            print(e)
+            await interaction.followup.send(f"❌ Error:\n```{e}```", ephemeral=True)
 
 
 # =========================
@@ -866,46 +835,29 @@ class StaffPanel(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔄 Cleanup", style=discord.ButtonStyle.secondary)
-    async def cleanup(self, interaction: discord.Interaction, button: Button):
-        await cleanup_tickets(interaction.guild)
-        await interaction.response.send_message("Cleanup done", ephemeral=True)
-
     @discord.ui.button(label="📊 Active", style=discord.ButtonStyle.primary)
     async def active(self, interaction: discord.Interaction, button: Button):
-        cursor = get_cursor()
-        cursor.execute("SELECT COUNT(*) FROM tickets")
-        count = cursor.fetchone()[0]
-
-        await interaction.response.send_message(
-            f"Active: {count}",
-            ephemeral=True
-        )
+        count = await db_fetchval("SELECT COUNT(*) FROM tickets")
+        await interaction.response.send_message(f"Active: {count}", ephemeral=True)
 
     @discord.ui.button(label="📁 Closed", style=discord.ButtonStyle.success)
     async def closed(self, interaction: discord.Interaction, button: Button):
-        cursor = get_cursor()
-        cursor.execute("SELECT COUNT(*) FROM closed_tickets")
-        count = cursor.fetchone()[0]
+        count = await db_fetchval("SELECT COUNT(*) FROM closed_tickets")
+        await interaction.response.send_message(f"Closed: {count}", ephemeral=True)
 
-        await interaction.response.send_message(
-            f"Closed: {count}",
-            ephemeral=True
-        )
+
+# =========================
+# POST COMMAND
+# =========================
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def post_ticket(ctx):
     embed = discord.Embed(
-        title="",
-        description=(
-            "# <a:ticket:1498373029573693473> Ticket \n"
-            "Για οποιοδίποτε πιθανό πρόβλημα έχετε όπως: \n> ```Officer Report``` \n> ```LSPD Report``` \n> ```Other```\n"
-            "Ανοίξτε ένα ticket ώστε να επικοινωνήσετε μαζί μας.\n"
-        ),
-        color=discord.Color.dark_red()
+        title="🎟️ Ticket System",
+        description="Ανοίξτε ticket για υποστήριξη",
+        color=discord.Color.red()
     )
-    embed.set_footer(text="Reloaded Roleplay")
 
     await ctx.send(embed=embed, view=TicketView())
 
