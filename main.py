@@ -97,57 +97,69 @@ async def on_ready():
 # DATABASE (HeidiSQL)
 # =========================
     
-db = None
+db_pool: asyncpg.Pool | None = None
 
-async def get_db():
-    global db
 
-    if db is None:
-        db = await asyncpg.connect(
+async def init_db():
+    global db_pool
+
+    if db_pool is None:
+        db_pool = await asyncpg.create_pool(
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASS"),
             database=os.getenv("DB_NAME"),
             host=os.getenv("DB_HOST"),
-            port=int(os.getenv("DB_PORT"))
+            port=int(os.getenv("DB_PORT")),
+            min_size=1,
+            max_size=5,
+            command_timeout=30,
         )
-        print("🔄 Connected to Supabase DB")
+        print("🔄 DB pool created")
 
+async def get_db() -> asyncpg.Pool:
+    if db_pool is None:
+        await init_db()
+    return db_pool
+
+async def db_fetchrow(query, *args):
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(query, *args)
+
+
+async def db_fetchval(query, *args):
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        return await conn.fetchval(query, *args)
+
+
+async def db_execute(query, *args):
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        return await conn.execute(query, *args)
+    
+async def db_healthcheck():
     try:
-        await db.execute("SELECT 1")
-    except:
-        db = await asyncpg.connect(
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASS"),
-            database=os.getenv("DB_NAME"),
-            host=os.getenv("DB_HOST"),
-            port=int(os.getenv("DB_PORT"))
-        )
-        print("🔄 Reconnected to DB")
-
-    return db
-
+        pool = await get_db()
+        async with pool.acquire() as conn:
+            await conn.execute("SELECT 1")
+        return True
+    except Exception as e:
+        print(f"DB HEALTH FAIL: {e}")
+        return False
+    
 async def keep_alive_db():
     while True:
         try:
-            db = await get_db()
-            await db.execute("SELECT 1")
-        except:
-            pass
+            pool = await get_db()
+            async with pool.acquire() as conn:
+                await conn.execute("SELECT 1")
+            print("DB ping OK")
 
-        await asyncio.sleep(300)  # κάθε 5 λεπτά
+        except Exception as e:
+            print(f"DB ping failed: {e}")
 
-        
-async def db_fetchrow(query, *args):
-    db = await get_db()
-    return await db.fetchrow(query, *args)
-
-async def db_execute(query, *args):
-    db = await get_db()
-    return await db.execute(query, *args)
-
-async def db_fetchval(query, *args):
-    db = await get_db()
-    return await db.fetchval(query, *args)
+        await asyncio.sleep(300)
 # =========================
 # ACTIVE CACHE
 # =========================
