@@ -4,6 +4,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 import json
 import os
+import socket
 import asyncio
 from discord import ButtonStyle, Interaction
 from discord.ui import View, Button, Modal, TextInput, Select
@@ -79,14 +80,27 @@ def set_cooldown(user_id):
     """Set the cooldown for a user."""
     application_cooldowns[user_id] = time.time()
 
+tasks_started = False
+
 @bot.event
 async def on_ready():
-    await  bot.change_presence(activity=discord.activity.Game(name="Reloaded RolePlay"), status=discord.Status.online)
+    global tasks_started
+
+    await bot.change_presence(
+        activity=discord.Game(name="Reloaded RolePlay"),
+        status=discord.Status.online
+    )
+
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
-    bot.loop.create_task(self_ping())
-    bot.loop.create_task(keep_alive_db())
+
+    if not tasks_started:
+        bot.loop.create_task(self_ping())
+        bot.loop.create_task(keep_alive_db())
+        tasks_started = True
+
     print("Είμαι Ξύπνιος")
+
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} slash commands")
@@ -160,6 +174,9 @@ async def keep_alive_db():
             print(f"DB ping failed: {e}")
 
         await asyncio.sleep(300)
+
+print("DB_HOST:", os.getenv("DB_HOST"))
+print(socket.gethostbyname(os.getenv("DB_HOST")))
 # =========================
 # ACTIVE CACHE
 # =========================
