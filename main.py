@@ -639,7 +639,10 @@ async def post_bike(ctx):
 
     await ctx.send(embed=embed)
 
-######### TICKET
+# =========================
+# TICKET SELECT
+# =========================
+
 class TicketSelect(Select):
     def __init__(self):
         options = [
@@ -674,12 +677,15 @@ class TicketSelect(Select):
 
             guild = interaction.guild
             user_id = interaction.user.id
+            selected_option = self.values[0]
 
             category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
             if not category:
                 return await interaction.followup.send("❌ No ticket category found.", ephemeral=True)
 
-            # CHECK EXISTING
+            # =========================
+            # CHECK EXISTING TICKET (SQL FIXED)
+            # =========================
             existing = await db_fetchrow(
                 "SELECT channel_id FROM tickets WHERE user_id=$1",
                 user_id
@@ -697,8 +703,6 @@ class TicketSelect(Select):
                         "DELETE FROM tickets WHERE user_id=$1",
                         user_id
                     )
-
-            selected_option = self.values[0]
 
             role = guild.get_role(TICKET_MANAGER_ROLE_ID)
 
@@ -719,7 +723,9 @@ class TicketSelect(Select):
                 overwrites=overwrites
             )
 
-            # INSERT TICKET
+            # =========================
+            # INSERT TICKET (FIXED SQL)
+            # =========================
             await db_execute(
                 "INSERT INTO tickets (user_id, channel_id, type) VALUES ($1, $2, $3)",
                 user_id,
@@ -727,19 +733,52 @@ class TicketSelect(Select):
                 selected_option
             )
 
+            # =========================
+            # UI (EXACT YOUR DESIGN)
+            # =========================
             embed = discord.Embed(
                 title="🎟️ Ticket Opened",
                 description=(
-                    f"👋 Hello {interaction.user.mention}, your ticket was created!\n"
-                    f"Type: **{selected_option}**"
+                    f"👋 Γεια σας {interaction.user.mention}, το ticket σας δημιουργήθηκε!\n"
+                    f"Το **{selected_option}** αίτημά σας θα απαντηθεί σύντομα.\n\n"
+                    "**Παρακαλώ να έχετε υπομονή!**"
                 ),
                 color=discord.Color.blue(),
                 timestamp=discord.utils.utcnow()
             )
 
-            embed.add_field(name="User", value=interaction.user.mention)
-            embed.add_field(name="Type", value=selected_option)
+            embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
+
+            embed.add_field(
+                name="📅 Ημερομηνία Δημιουργίας",
+                value=discord.utils.format_dt(interaction.created_at, style='F'),
+                inline=True
+            )
+
+            embed.add_field(
+                name="🔍 Τύπος Ticket",
+                value=f"**{selected_option}**",
+                inline=True
+            )
+
+            embed.add_field(
+                name="⚠️ Ειδοποίηση",
+                value="Παρακαλώ μην κάνετε συνεχόμενα ping.",
+                inline=False
+            )
+
+            embed.add_field(
+                name="📜 Κατευθυντήριες Οδηγίες",
+                value="Να είστε ευγενικοί και να ακολουθείτε τους κανόνες.",
+                inline=False
+            )
+
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
+
+            if guild.icon:
+                embed.set_footer(text="Σύστημα Υποστήριξης Ticket", icon_url=guild.icon.url)
+            else:
+                embed.set_footer(text="Σύστημα Υποστήριξης Ticket")
 
             await ticket_channel.send(
                 content=interaction.user.mention,
@@ -754,7 +793,10 @@ class TicketSelect(Select):
 
         except Exception as e:
             print(traceback.format_exc())
-            await interaction.followup.send(f"❌ Error:\n```{e}```", ephemeral=True)
+            await interaction.followup.send(
+                f"❌ Error:\n```{e}```",
+                ephemeral=True
+            )
 
 
 # =========================
@@ -795,7 +837,11 @@ class CloseTicketButton(Button):
 
             if log_channel:
                 await log_channel.send(
-                    content=f"📁 Ticket Closed\nUser: <@{user_id}>\nType: {ticket_type}"
+                    content=(
+                        f"📁 Ticket Closed\n"
+                        f"👤 User: <@{user_id}>\n"
+                        f"🎫 Type: {ticket_type}"
+                    )
                 )
 
             await db_execute(
@@ -812,6 +858,7 @@ class CloseTicketButton(Button):
             )
 
             await interaction.followup.send("🔒 Closing ticket...", ephemeral=True)
+
             await asyncio.sleep(1)
             await channel.delete()
 
@@ -864,14 +911,24 @@ class StaffPanel(View):
 async def post_ticket(ctx):
     embed = discord.Embed(
         title="🎟️ Ticket System",
-        description="Ανοίξτε ticket για υποστήριξη",
-        color=discord.Color.red()
+        description=(
+            "# <a:ticket:1498373029573693473> Ticket\n"
+            "Για οποιοδήποτε πρόβλημα:\n"
+            "> Officer Report\n"
+            "> LSPD Report\n"
+            "> Other\n\n"
+            "Ανοίξτε ticket για υποστήριξη."
+        ),
+        color=discord.Color.dark_red()
     )
+
+    embed.set_footer(text="Reloaded Roleplay")
 
     await ctx.send(embed=embed, view=TicketView())
 
+
 # =========================
-# AUTO CLEANUP LOOP
+# AUTO CLEANUP
 # =========================
 
 @tasks.loop(minutes=10)
