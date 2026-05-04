@@ -124,7 +124,17 @@ async def get_db():
 
     return db
 
+async def keep_alive_db():
+    while True:
+        try:
+            db = await get_db()
+            await db.execute("SELECT 1")
+        except:
+            pass
 
+        await asyncio.sleep(300)  # κάθε 5 λεπτά
+
+        
 async def db_fetchrow(query, *args):
     db = await get_db()
     return await db.fetchrow(query, *args)
