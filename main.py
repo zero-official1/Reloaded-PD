@@ -84,6 +84,7 @@ async def on_ready():
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
     bot.loop.create_task(self_ping())
+    bot.loop.create_task(keep_alive_db())
     print("Είμαι Ξύπνιος")
     try:
         synced = await bot.tree.sync()
@@ -1008,134 +1009,139 @@ class LSPDApplicationModal(Modal):
 
 class LSPDApplicationReviewButtons(discord.ui.View):
     def __init__(self, user: discord.Member = None):
-        super().__init__(timeout=None)  
-        self.user = user  
+        super().__init__(timeout=None)
+        self.user = user
+
+    async def get_applicant(self, interaction: discord.Interaction):
+        # Παίρνει τον σωστό user από το View
+        if self.user:
+            return self.user
+
+        # fallback (δεν αλλάζουμε logic σου)
+        return interaction.guild.get_member(interaction.user.id) or await interaction.guild.fetch_member(interaction.user.id)
 
     @discord.ui.button(label="Αποδοχή", style=discord.ButtonStyle.success, custom_id="accept_lspd")
     async def accept_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        await interaction.response.defer()
+
         applicant = await self.get_applicant(interaction)
+
         if not applicant:
-            embed = discord.Embed(
-                title="❌ Error",
-                description="Applicant not found.",
-                color=discord.Color.red()
+            return await interaction.followup.send(
+                embed=discord.Embed(
+                    title="❌ Error",
+                    description="Applicant not found.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
             )
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         role = interaction.guild.get_role(LSPD_ROLE_ID)
         if role:
             await applicant.add_roles(role)
-        
+
         embed = discord.Embed(
-    title="✅ Αίτηση Εγκρίθηκε",
-    description=f"👮 {applicant.mention}, Η αίτηση έγινε αποδεκτή!",
-    color=discord.Color.blue(),
-    timestamp=discord.utils.utcnow()
-)
+            title="✅ Αίτηση Εγκρίθηκε",
+            description=f"👮 {applicant.mention}, Η αίτηση έγινε αποδεκτή!",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
 
-        embed.add_field(
-    name="📌 Κατάσταση",
-    value="🟢 Εγκρίθηκε",
-    inline=True
-)
-
-        embed.add_field(
-    name="👤 Υπεύθυνος",
-    value=interaction.user.mention,
-    inline=True
-)
+        embed.add_field(name="📌 Κατάσταση", value="🟢 Εγκρίθηκε", inline=True)
+        embed.add_field(name="👤 Υπεύθυνος", value=interaction.user.mention, inline=True)
 
         embed.set_thumbnail(url=applicant.display_avatar.url)
 
-        await interaction.response.send_message(embed=embed)
-        await interaction.message.edit(view=None)
+        await interaction.followup.send(embed=embed)
 
+        # disable buttons
+        for item in self.children:
+            item.disabled = True
+        await interaction.message.edit(view=self)
+
+        # DM
         try:
             dm_embed = discord.Embed(
                 title="🚓 LSPD Recruitment",
                 description="# <a:bsiren:1498453102167068842> 〢 Η Αίτηση Εγκρίθηκε\n\n"
-                "🎉 Συγχαρητήρια! Έχετε γίνει δεκτός στο LSPD.\n\n"
-                        "```Για να μάθετε πληροφορίες σχετικά με το πότε θα γίνει το εντατικό μάθημα για την ένταξη σας στο LSPD παρακαλώ πολύ περιμένετε να βγεί ανακοίνωση απο τα υψηλόβαθμα μέλοι του LSPD στον Discord Server του Reloaded PD.```",
+                            "🎉 Συγχαρητήρια! Έχετε γίνει δεκτός στο LSPD.\n\n"
+                            "```Για να μάθετε πληροφορίες σχετικά με το πότε θα γίνει το εντατικό μάθημα για την ένταξη σας στο LSPD παρακαλώ πολύ περιμένετε να βγεί ανακοίνωση απο τα υψηλόβαθμα μέλοι του LSPD στον Discord Server του Reloaded PD.```",
                 color=discord.Color.blue(),
                 timestamp=discord.utils.utcnow()
             )
             dm_embed.set_thumbnail(url=applicant.display_avatar.url)
             await applicant.send(embed=dm_embed)
+
         except discord.Forbidden:
-            error_embed = discord.Embed(
-                title="❌ Error",
-                description=f"Could not send a DM to {applicant.mention}.",
-                color=discord.Color.red()
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title="❌ Error",
+                    description=f"Could not send a DM to {applicant.mention}.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
             )
-            await interaction.channel.send(embed=error_embed)
 
-@discord.ui.button(label="Απόρριψη", style=discord.ButtonStyle.danger, custom_id="deny_lspd")
-async def deny_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Απόρριψη", style=discord.ButtonStyle.danger, custom_id="deny_lspd")
+    async def deny_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-    await interaction.response.defer()
+        await interaction.response.defer()
 
-    # ✅ Πάρε τον σωστό applicant από το View
-    applicant = self.user
+        applicant = await self.get_applicant(interaction)
 
-    if not applicant:
-        return await interaction.followup.send(
-            "❌ Applicant not found.",
-            ephemeral=True
-        )
+        if not applicant:
+            return await interaction.followup.send(
+                "❌ Applicant not found.",
+                ephemeral=True
+            )
 
-    # 🔴 Main embed
-    embed = discord.Embed(
-        title="❌ Αίτηση Απορρίφθηκε",
-        description=f"{applicant.mention}, η αίτησή σας δεν έγινε αποδεκτή.",
-        color=discord.Color.red(),
-        timestamp=discord.utils.utcnow()
-    )
-
-    embed.add_field(name="📌 Κατάσταση", value="🔴 Απορρίφθηκε", inline=True)
-    embed.add_field(name="👤 Υπεύθυνος", value=interaction.user.mention, inline=True)
-
-    embed.set_thumbnail(url=applicant.display_avatar.url)
-
-    await interaction.followup.send(embed=embed)
-
-    # ❌ Disable buttons (καλύτερο από remove)
-    for item in self.children:
-        item.disabled = True
-    await interaction.message.edit(view=self)
-
-    # 📩 DM στον applicant
-    try:
-        dm_embed = discord.Embed(
-            title="🚓 LSPD Recruitment",
-            description=(
-                "# <a:siren:1498369700025995294> 〢 Η Αίτηση Απορρίφθηκε\n\n"
-                "❌ Η αίτησή σας απορρίφθηκε.\n"
-                "📅 Μπορείτε να ξανακάνετε αίτηση σε 15 ημέρες."
-            ),
+        embed = discord.Embed(
+            title="❌ Αίτηση Απορρίφθηκε",
+            description=f"{applicant.mention}, η αίτησή σας δεν έγινε αποδεκτή.",
             color=discord.Color.red(),
             timestamp=discord.utils.utcnow()
         )
 
-        dm_embed.set_thumbnail(url=applicant.display_avatar.url)
+        embed.add_field(name="📌 Κατάσταση", value="🔴 Απορρίφθηκε", inline=True)
+        embed.add_field(name="👤 Υπεύθυνος", value=interaction.user.mention, inline=True)
 
-        dm = await applicant.create_dm()
-        await dm.send(embed=dm_embed)
+        embed.set_thumbnail(url=applicant.display_avatar.url)
 
-    except discord.Forbidden:
-        await interaction.followup.send(
-        embed=discord.Embed(
-            title="❌ Error",
-            description=f"Could not send a DM to {applicant.mention}.",
-            color=discord.Color.red()
-        ),
-        ephemeral=True
-    )
+        await interaction.followup.send(embed=embed)
 
-        await interaction.message.edit(view=None)
+        # disable buttons
+        for item in self.children:
+            item.disabled = True
+        await interaction.message.edit(view=self)
 
-    async def get_applicant(self, interaction: discord.Interaction):
-        """Fetches the applicant from cache or API."""
-        return interaction.guild.get_member(interaction.user.id) or await interaction.guild.fetch_member(interaction.user.id)
+        # DM
+        try:
+            dm_embed = discord.Embed(
+                title="🚓 LSPD Recruitment",
+                description=(
+                    "# <a:siren:1498369700025995294> 〢 Η Αίτηση Απορρίφθηκε\n\n"
+                    "❌ Η αίτησή σας απορρίφθηκε.\n"
+                    "📅 Μπορείτε να ξανακάνετε αίτηση σε 15 ημέρες."
+                ),
+                color=discord.Color.red(),
+                timestamp=discord.utils.utcnow()
+            )
+
+            dm_embed.set_thumbnail(url=applicant.display_avatar.url)
+
+            await applicant.send(embed=dm_embed)
+
+        except discord.Forbidden:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title="❌ Error",
+                    description=f"Could not send a DM to {applicant.mention}.",
+                    color=discord.Color.red()
+                ),
+                ephemeral=True
+            )
+
 
 class ApplicationSelectView(discord.ui.View):
     def __init__(self):
