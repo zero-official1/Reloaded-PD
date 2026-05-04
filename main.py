@@ -10,7 +10,6 @@ from discord.ui import View, Button, Modal, TextInput, Select
 from datetime import timedelta
 import time
 import re
-import pymysql
 import io
 import sys
 from flask import Flask
