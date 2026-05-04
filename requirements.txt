@@ -3,3 +3,4 @@ aiohttp
 asyncpg
 flask
 python-dotenv
+supabase
