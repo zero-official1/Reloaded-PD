@@ -19,6 +19,7 @@ import aiohttp
 import asyncpg
 from supabase import create_client, Client
 from dotenv import load_dotenv
+load_dotenv()
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 TICKET_CATEGORY_ID = 1498367118461108274
