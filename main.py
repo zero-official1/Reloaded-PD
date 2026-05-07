@@ -808,105 +808,171 @@ class TicketSelect(Select):
             custom_id="ticket_select"
         )
 
-    async def callback(self, interaction: discord.Interaction):
+async def callback(self, interaction: discord.Interaction):
 
-        print("🎫 Ticket select clicked")
+    print("🎫 Ticket select clicked")
 
-        try:
+    try:
 
-            await interaction.response.defer(ephemeral=True)
+        # =========================
+        # ACK FAST
+        # =========================
 
-            print("✅ Interaction deferred")
+        await interaction.response.defer(
+            ephemeral=True
+        )
 
-            guild = interaction.guild
-            user_id = interaction.user.id
-            selected_option = self.values[0]
+        print("✅ Interaction deferred")
 
-            category = discord.utils.get(
-            guild.categories,
-            id=TICKET_CATEGORY_ID
-            )
+        guild = interaction.guild
 
-            if not category:
-                return await interaction.followup.send(
-                "❌ No ticket category found.",
+        if guild is None:
+            return
+
+        user_id = interaction.user.id
+
+        selected_option = self.values[0]
+
+        # =========================
+        # CATEGORY
+        # =========================
+
+        category = guild.get_channel(
+            TICKET_CATEGORY_ID
+        )
+
+        if category is None:
+
+            return await interaction.followup.send(
+                "❌ Ticket category not found.",
                 ephemeral=True
             )
 
-            print("🔄 Checking existing tickets...")
+        # =========================
+        # EXISTING TICKET
+        # =========================
 
-            existing = await db_fetchrow(
+        existing = await db_fetchrow(
             "SELECT channel_id FROM tickets WHERE user_id=$1",
             user_id
+        )
+
+        if existing:
+
+            old_channel = guild.get_channel(
+                existing["channel_id"]
             )
 
-            if existing:
+            if old_channel:
 
-                channel = guild.get_channel(existing["channel_id"])
-
-                if channel:
-                    return await interaction.followup.send(
-                    f"⚠️ You already have a ticket: {channel.mention}",
+                return await interaction.followup.send(
+                    f"⚠️ You already have a ticket: {old_channel.mention}",
                     ephemeral=True
-                    )
+                )
 
-                else:
-                    await db_execute(
+            else:
+
+                await db_execute(
                     "DELETE FROM tickets WHERE user_id=$1",
                     user_id
-                    )
+                )
 
-            role = guild.get_role(TICKET_MANAGER_ROLE_ID)
+        # =========================
+        # ROLE
+        # =========================
 
-            username = re.sub(
-            r'[^a-z0-9-]',
-            '',
+        role = guild.get_role(
+            TICKET_MANAGER_ROLE_ID
+        )
+
+        # =========================
+        # CHANNEL NAME
+        # =========================
+
+        username = re.sub(
+            r"[^a-z0-9-]",
+            "",
             interaction.user.name.lower()
-            )
+        )
 
-            channel_name = (
-            f"ticket-{username}-{interaction.user.discriminator}"
-            )
+        channel_name = (
+            f"ticket-{username}-{interaction.user.id}"
+        )
 
-            overwrites = {
-            guild.default_role: discord.PermissionOverwrite(
+        # =========================
+        # PERMISSIONS
+        # =========================
+
+        overwrites = {
+
+            guild.default_role:
+            discord.PermissionOverwrite(
                 view_channel=False
             ),
 
-            interaction.user: discord.PermissionOverwrite(
+            interaction.user:
+            discord.PermissionOverwrite(
                 view_channel=True,
-                send_messages=True
-            ),
-            }
+                send_messages=True,
+                read_message_history=True
+            )
+        }
 
-            if role:
-                overwrites[role] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True
+        if role:
+
+            overwrites[role] = (
+                discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    read_message_history=True
+                )
             )
 
-            print("🔄 Creating ticket channel...")
+        print("🔄 Creating ticket channel...")
 
-            ticket_channel = await guild.create_text_channel(
+        # =========================
+        # CREATE CHANNEL
+        # =========================
+
+        ticket_channel = await guild.create_text_channel(
             name=channel_name,
             category=category,
             overwrites=overwrites
-            )
+        )
 
-            print("🔄 Saving ticket to DB...")
+        print("✅ Channel created")
+
+        # =========================
+        # SAVE TO DB
+        # =========================
+
+        try:
 
             await db_execute(
-            "INSERT INTO tickets (user_id, channel_id, type) VALUES ($1, $2, $3)",
-            user_id,
-            ticket_channel.id,
-            selected_option
+                """
+                INSERT INTO tickets
+                (user_id, channel_id, type)
+
+                VALUES ($1, $2, $3)
+                """,
+                user_id,
+                ticket_channel.id,
+                selected_option
             )
+
+        except Exception:
+
+            await ticket_channel.delete()
+
+            raise
+
+        print("✅ Saved to DB")
 
 
             # =========================
             # UI (EXACT YOUR DESIGN)
             # =========================
-            embed = discord.Embed(
+        embed = discord.Embed(
                 title="🎟️ Ticket Opened",
                 description=(
                     f"👋 Γεια σας {interaction.user.mention}, το ticket σας δημιουργήθηκε!\n"
@@ -917,73 +983,78 @@ class TicketSelect(Select):
                 timestamp=discord.utils.utcnow()
             )
 
-            embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
+        embed.add_field(name="👤 Χρήστης", value=interaction.user.mention, inline=True)
 
-            embed.add_field(
+        embed.add_field(
                 name="📅 Ημερομηνία Δημιουργίας",
                 value=discord.utils.format_dt(interaction.created_at, style='F'),
                 inline=True
             )
 
-            embed.add_field(
+        embed.add_field(
                 name="🔍 Τύπος Ticket",
                 value=f"**{selected_option}**",
                 inline=True
             )
 
-            embed.add_field(
+        embed.add_field(
                 name="⚠️ Ειδοποίηση",
                 value="Παρακαλώ μην κάνετε συνεχόμενα ping.",
                 inline=False
             )
 
-            embed.add_field(
+        embed.add_field(
                 name="📜 Κατευθυντήριες Οδηγίες",
                 value="Να είστε ευγενικοί και να ακολουθείτε τους κανόνες.",
                 inline=False
             )
 
-            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
-            if guild.icon:
+        if guild.icon:
                 embed.set_footer(text="Σύστημα Υποστήριξης Ticket", icon_url=guild.icon.url)
-            else:
+        else:
                 embed.set_footer(text="Σύστημα Υποστήριξης Ticket")
 
-            await ticket_channel.send(
-                content=interaction.user.mention,
-                embed=embed,
-                view=CloseTicketView()
-            )
+
+        # =========================
+        # SEND MESSAGE
+        # =========================
+
+        await ticket_channel.send(
+            content=interaction.user.mention,
+            embed=embed,
+            view=CloseTicketView()
+        )
+
+        # =========================
+        # FINAL RESPONSE
+        # =========================
+
+        await interaction.followup.send(
+            f"✅ Ticket created: {ticket_channel.mention}",
+            ephemeral=True
+        )
+
+        print("✅ Ticket finished")
+
+    except Exception as e:
+
+        print("❌ TICKET ERROR")
+        print(traceback.format_exc())
+
+        try:
 
             await interaction.followup.send(
-                f"✅ Ticket created: {ticket_channel.mention}",
+                f"❌ Error:\n```py\n{e}\n```",
                 ephemeral=True
             )
 
-        except Exception as e:
+        except Exception as err:
 
-            print("❌ TICKET ERROR")
-            print(traceback.format_exc())
-
-            try:
-
-                if interaction.response.is_done():
-
-                    await interaction.followup.send(
-                    f"❌ Error:\n```{e}```",
-                    ephemeral=True
-                    )
-
-                else:
-
-                    await interaction.response.send_message(
-                    f"❌ Error:\n```{e}```",
-                    ephemeral=True
-                    )
-
-            except Exception as err:
-                print(f"FOLLOWUP ERROR: {err}")
+            print(
+                f"FOLLOWUP ERROR: {err}"
+            )
 
 
 # =========================
