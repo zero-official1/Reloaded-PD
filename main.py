@@ -157,6 +157,7 @@ async def init_db():
     except Exception as e:
         print(f"❌ DB INIT ERROR: {e}")
         db_pool = None
+        raise e
 
 
 async def get_db():
@@ -164,6 +165,9 @@ async def get_db():
 
     if db_pool is None:
         await init_db()
+
+    if db_pool is None:
+        raise Exception("Database pool is not initialized.")
 
     return db_pool
 
