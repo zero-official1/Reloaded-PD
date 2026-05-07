@@ -21,6 +21,15 @@ import asyncpg
 from supabase import create_client, Client
 from dotenv import load_dotenv
 load_dotenv()
+print("DB_HOST:", repr(os.getenv("DB_HOST")))
+
+try:
+    print(
+        "DNS:",
+        socket.gethostbyname(os.getenv("DB_HOST"))
+    )
+except Exception as e:
+    print("DNS ERROR:", e)
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 TICKET_CATEGORY_ID = 1498367118461108274
@@ -86,6 +95,10 @@ tasks_started = False
 async def on_ready():
     global tasks_started
 
+    print("🚀 Bot starting...")
+
+    await init_db()
+
     await bot.change_presence(
         activity=discord.Game(name="Reloaded RolePlay"),
         status=discord.Status.online
@@ -93,19 +106,21 @@ async def on_ready():
 
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
+    bot.add_view(ApplicationSelectView())
 
     if not tasks_started:
         bot.loop.create_task(self_ping())
         bot.loop.create_task(keep_alive_db())
         tasks_started = True
 
-    print("Είμαι Ξύπνιος")
+    print(f"✅ Logged in as {bot.user}")
 
     try:
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} slash commands")
+        print(f"✅ Synced {len(synced)} slash commands")
+
     except Exception as e:
-        print(e)
+        print(f"❌ Slash Sync Error: {e}")
 
 # =========================
 # DATABASE (HeidiSQL)
@@ -117,7 +132,12 @@ db_pool: asyncpg.Pool | None = None
 async def init_db():
     global db_pool
 
-    if db_pool is None:
+    if db_pool is not None:
+        return
+
+    try:
+        print("🔄 Initializing DB pool...")
+
         db_pool = await asyncpg.create_pool(
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASS"),
@@ -128,55 +148,102 @@ async def init_db():
             max_size=5,
             command_timeout=30,
         )
-        print("🔄 DB pool created")
 
-async def get_db() -> asyncpg.Pool:
+        async with db_pool.acquire() as conn:
+            await conn.execute("SELECT 1")
+
+        print("✅ DB pool connected")
+
+    except Exception as e:
+        print(f"❌ DB INIT ERROR: {e}")
+        db_pool = None
+
+
+async def get_db():
+    global db_pool
+
     if db_pool is None:
         await init_db()
+
     return db_pool
 
+
+async def reconnect_db():
+    global db_pool
+
+    try:
+        if db_pool:
+            await db_pool.close()
+    except:
+        pass
+
+    db_pool = None
+
+    await init_db()
+
+
 async def db_fetchrow(query, *args):
-    pool = await get_db()
-    async with pool.acquire() as conn:
-        return await conn.fetchrow(query, *args)
+    try:
+        pool = await get_db()
+
+        async with pool.acquire() as conn:
+            return await conn.fetchrow(query, *args)
+
+    except Exception as e:
+        print(f"DB FETCHROW ERROR: {e}")
+
+        await reconnect_db()
+
+        raise e
 
 
 async def db_fetchval(query, *args):
-    pool = await get_db()
-    async with pool.acquire() as conn:
-        return await conn.fetchval(query, *args)
+    try:
+        pool = await get_db()
+
+        async with pool.acquire() as conn:
+            return await conn.fetchval(query, *args)
+
+    except Exception as e:
+        print(f"DB FETCHVAL ERROR: {e}")
+
+        await reconnect_db()
+
+        raise e
 
 
 async def db_execute(query, *args):
-    pool = await get_db()
-    async with pool.acquire() as conn:
-        return await conn.execute(query, *args)
-    
-async def db_healthcheck():
     try:
         pool = await get_db()
+
         async with pool.acquire() as conn:
-            await conn.execute("SELECT 1")
-        return True
+            return await conn.execute(query, *args)
+
     except Exception as e:
-        print(f"DB HEALTH FAIL: {e}")
-        return False
-    
+        print(f"DB EXECUTE ERROR: {e}")
+
+        await reconnect_db()
+
+        raise e
+
+
 async def keep_alive_db():
     while True:
+
         try:
             pool = await get_db()
+
             async with pool.acquire() as conn:
                 await conn.execute("SELECT 1")
-            print("DB ping OK")
+
+            print("✅ DB ping OK")
 
         except Exception as e:
-            print(f"DB ping failed: {e}")
+            print(f"❌ DB ping failed: {e}")
+
+            await reconnect_db()
 
         await asyncio.sleep(300)
-
-print("DB_HOST:", os.getenv("DB_HOST"))
-print(socket.gethostbyname(os.getenv("DB_HOST")))
 # =========================
 # ACTIVE CACHE
 # =========================
@@ -703,66 +770,97 @@ class TicketSelect(Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+
+        print("🎫 Ticket select clicked")
+
         try:
+
             await interaction.response.defer(ephemeral=True)
+
+            print("✅ Interaction deferred")
 
             guild = interaction.guild
             user_id = interaction.user.id
             selected_option = self.values[0]
 
-            category = discord.utils.get(guild.categories, id=TICKET_CATEGORY_ID)
-            if not category:
-                return await interaction.followup.send("❌ No ticket category found.", ephemeral=True)
+            category = discord.utils.get(
+            guild.categories,
+            id=TICKET_CATEGORY_ID
+            )
 
-            # =========================
-            # CHECK EXISTING TICKET (SQL FIXED)
-            # =========================
+            if not category:
+                return await interaction.followup.send(
+                "❌ No ticket category found.",
+                ephemeral=True
+            )
+
+            print("🔄 Checking existing tickets...")
+
             existing = await db_fetchrow(
-                "SELECT channel_id FROM tickets WHERE user_id=$1",
-                user_id
+            "SELECT channel_id FROM tickets WHERE user_id=$1",
+            user_id
             )
 
             if existing:
+
                 channel = guild.get_channel(existing["channel_id"])
-                if channel:
-                    return await interaction.followup.send(
-                        f"⚠️ You already have a ticket: {channel.mention}",
-                        ephemeral=True
-                    )
-                else:
-                    await db_execute(
-                        "DELETE FROM tickets WHERE user_id=$1",
-                        user_id
-                    )
+
+            if channel:
+                return await interaction.followup.send(
+                    f"⚠️ You already have a ticket: {channel.mention}",
+                    ephemeral=True
+                )
+
+            else:
+                await db_execute(
+                    "DELETE FROM tickets WHERE user_id=$1",
+                    user_id
+                )
 
             role = guild.get_role(TICKET_MANAGER_ROLE_ID)
 
-            username = re.sub(r'[^a-z0-9-]', '', interaction.user.name.lower())
+            username = re.sub(
+            r'[^a-z0-9-]',
+            '',
+            interaction.user.name.lower()
+            )
+
             channel_name = f"ticket-{username}"
 
             overwrites = {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.default_role: discord.PermissionOverwrite(
+                view_channel=False
+            ),
+
+            interaction.user: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True
+            ),
             }
 
             if role:
-                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+                overwrites[role] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True
+            )
+
+            print("🔄 Creating ticket channel...")
 
             ticket_channel = await guild.create_text_channel(
-                name=channel_name,
-                category=category,
-                overwrites=overwrites
+            name=channel_name,
+            category=category,
+            overwrites=overwrites
             )
 
-            # =========================
-            # INSERT TICKET (FIXED SQL)
-            # =========================
+            print("🔄 Saving ticket to DB...")
+
             await db_execute(
-                "INSERT INTO tickets (user_id, channel_id, type) VALUES ($1, $2, $3)",
-                user_id,
-                ticket_channel.id,
-                selected_option
+            "INSERT INTO tickets (user_id, channel_id, type) VALUES ($1, $2, $3)",
+            user_id,
+            ticket_channel.id,
+            selected_option
             )
+
 
             # =========================
             # UI (EXACT YOUR DESIGN)
@@ -823,11 +921,28 @@ class TicketSelect(Select):
             )
 
         except Exception as e:
+
+            print("❌ TICKET ERROR")
             print(traceback.format_exc())
-            await interaction.followup.send(
-                f"❌ Error:\n```{e}```",
-                ephemeral=True
-            )
+
+            try:
+
+                if interaction.response.is_done():
+
+                    await interaction.followup.send(
+                    f"❌ Error:\n```{e}```",
+                    ephemeral=True
+                    )
+
+                else:
+
+                    await interaction.response.send_message(
+                    f"❌ Error:\n```{e}```",
+                    ephemeral=True
+                    )
+
+            except Exception as err:
+                print(f"FOLLOWUP ERROR: {err}")
 
 
 # =========================
