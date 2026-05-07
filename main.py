@@ -106,7 +106,10 @@ async def on_ready():
 
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
+    bot.add_view(StaffPanel())
     bot.add_view(ApplicationSelectView())
+    bot.loop.create_task(keep_alive_db())
+    bot.loop.create_task(self_ping())
 
     if not tasks_started:
         bot.loop.create_task(self_ping())
@@ -259,64 +262,96 @@ active_tickets = {}
 # =========================
 
 async def get_transcript(channel: discord.TextChannel):
-    messages = [msg async for msg in channel.history(oldest_first=True, limit=None)]
 
-    transcript = []
-    transcript.append(f"=== TICKET TRANSCRIPT #{channel.name} ===\n")
+    transcript_lines = []
 
-    for msg in messages:
-        time = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    transcript_lines.append(
+        f"=== TICKET TRANSCRIPT #{channel.name} ===\n"
+    )
 
-        content = msg.content if msg.content else ""
+    async for msg in channel.history(
+        oldest_first=True,
+        limit=None
+    ):
 
-        # embeds (basic text extraction)
-        embeds_text = ""
-        if msg.embeds:
-            for embed in msg.embeds:
-                if embed.title:
-                    embeds_text += f"[EMBED TITLE] {embed.title}\n"
-                if embed.description:
-                    embeds_text += f"[EMBED DESC] {embed.description}\n"
-
-        # attachments
-        attachments = ""
-        if msg.attachments:
-            attachments = " | ".join([a.url for a in msg.attachments])
-
-        transcript.append(
-            f"[{time}] {msg.author} ({msg.author.id})\n"
-            f"CONTENT: {content}\n"
-            f"{'EMBEDS: ' + embeds_text if embeds_text else ''}"
-            f"{'ATTACHMENTS: ' + attachments if attachments else ''}\n"
-            f"{'-'*50}"
+        timestamp = msg.created_at.strftime(
+            "%Y-%m-%d %H:%M:%S"
         )
 
-    transcript.append("\n=== END OF TRANSCRIPT ===")
+        content = msg.content or "No message content"
 
-    return "\n".join(transcript)
+        # EMBEDS
+        embeds_text = ""
+
+        if msg.embeds:
+
+            for embed in msg.embeds:
+
+                if embed.title:
+                    embeds_text += (
+                        f"[EMBED TITLE] {embed.title}\n"
+                    )
+
+                if embed.description:
+                    embeds_text += (
+                        f"[EMBED DESC] {embed.description}\n"
+                    )
+
+        # ATTACHMENTS
+        attachments = ""
+
+        if msg.attachments:
+
+            attachments = " | ".join(
+                attachment.url
+                for attachment in msg.attachments
+            )
+
+        transcript_lines.append(
+            f"[{timestamp}] "
+            f"{msg.author} ({msg.author.id})\n"
+            f"CONTENT: {content}\n"
+            f"{'EMBEDS:\n' + embeds_text if embeds_text else ''}"
+            f"{'ATTACHMENTS: ' + attachments if attachments else ''}\n"
+            f"{'-'*50}\n"
+        )
+
+    transcript_lines.append(
+        "\n=== END OF TRANSCRIPT ==="
+    )
+
+    return "".join(transcript_lines)
 
 # =========================
 # CLEANUP SYSTEM
 # =========================
 
 async def cleanup_tickets(guild: discord.Guild):
-    db = await get_db()
 
-    rows = await db.fetch("SELECT user_id, channel_id FROM tickets")
+    pool = await get_db()
 
-    deleted = 0
+    async with pool.acquire() as conn:
 
-    for row in rows:
-        channel = guild.get_channel(row["channel_id"])
+        rows = await conn.fetch(
+            "SELECT user_id, channel_id FROM tickets"
+        )
 
-        if channel is None:
-            await db.execute(
-                "DELETE FROM tickets WHERE channel_id=$1",
-                row["channel_id"]
-            )
-            deleted += 1
+        deleted = 0
 
-    print(f"🧹 Cleanup done - removed {deleted} orphan tickets")
+        for row in rows:
+
+            channel = guild.get_channel(row["channel_id"])
+
+            if channel is None:
+
+                await conn.execute(
+                    "DELETE FROM tickets WHERE channel_id=$1",
+                    row["channel_id"]
+                )
+
+                deleted += 1
+
+        print(f"🧹 Cleanup done - removed {deleted} orphan tickets")
 
 
    ################## Ranks
@@ -809,17 +844,17 @@ class TicketSelect(Select):
 
                 channel = guild.get_channel(existing["channel_id"])
 
-            if channel:
-                return await interaction.followup.send(
+                if channel:
+                    return await interaction.followup.send(
                     f"⚠️ You already have a ticket: {channel.mention}",
                     ephemeral=True
-                )
+                    )
 
-            else:
-                await db_execute(
+                else:
+                    await db_execute(
                     "DELETE FROM tickets WHERE user_id=$1",
                     user_id
-                )
+                    )
 
             role = guild.get_role(TICKET_MANAGER_ROLE_ID)
 
@@ -829,7 +864,9 @@ class TicketSelect(Select):
             interaction.user.name.lower()
             )
 
-            channel_name = f"ticket-{username}"
+            channel_name = (
+            f"ticket-{username}-{interaction.user.discriminator}"
+            )
 
             overwrites = {
             guild.default_role: discord.PermissionOverwrite(
@@ -1007,10 +1044,29 @@ class CloseTicketButton(Button):
                 channel.id
             )
 
-            await interaction.followup.send("🔒 Closing ticket...", ephemeral=True)
+            role = interaction.guild.get_role(
+            TICKET_MANAGER_ROLE_ID
+            )
 
-            await asyncio.sleep(1)
-            await channel.delete()
+            if role not in interaction.user.roles:
+
+                return await interaction.followup.send(
+            "❌ Δεν έχεις permission.",
+            ephemeral=True
+            )
+
+            await interaction.followup.send(
+                "🔒 Closing ticket...",
+                ephemeral=True
+                )
+
+            await asyncio.sleep(2)
+
+            try:
+                await channel.delete()
+
+            except discord.NotFound:
+                pass
 
         except Exception as e:
             print(e)
